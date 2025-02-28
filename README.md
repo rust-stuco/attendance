@@ -18,7 +18,11 @@ Update the sender and recipient info `config.toml`, then run the mailer.
 # TODO
 
 [x] Get mailing functionality working
+
 [] Manage roster add/removes
+
 [] Manage excusals
+
 [] Add warning and confirmation before emails are sent
+
 [] Add option to cancel emails within window
