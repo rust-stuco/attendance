@@ -37,8 +37,8 @@ Next, create your `roster.json` and `weekly_data.json` files and update their pa
 
 [x] Manage excusals
 
-[] Batch mark attended from file
+[] Batch mark attendees from file
 
 [x] Add warning and confirmation before emails are sent
 
-[] Add option to cancel emails within window
+[] Add option to cancel emails within time window
