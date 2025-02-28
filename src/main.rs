@@ -1,146 +1,94 @@
-use native_tls::TlsConnector;
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::time::Duration;
-use base64::encode;
-use dotenv::dotenv;
+mod mailer;
+mod roster;
+
+use roster::AttendanceManager;
 use config::Config;
-use serde::Deserialize;
-use std::env;
+use std::error::Error;
 
-#[derive(Debug, Deserialize)]
-struct SmtpConfig {
-    smtp: SmtpDetails,
-}
-
-#[derive(Debug, Deserialize)]
-struct SmtpDetails {
-    sender: String,
-    to: String,
-    cc: String
-}
-
-fn load_config() -> Result<SmtpDetails, Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     // Load configuration from config.toml
     let settings = Config::builder()
         .add_source(config::File::with_name("config"))
         .build()?;
 
-    // Deserialize the configuration into the SmtpConfig struct
-    let smtp_config: SmtpConfig = settings.try_deserialize()?;
+    let roster_path = settings.get_string("attendance_manager.roster_path")?;
+    let weekly_data_path = settings.get_string("attendance_manager.weekly_data_path")?;
 
-    Ok(smtp_config.smtp)
-}
+    let args: Vec<String> = std::env::args().collect();
+    let mut manager = AttendanceManager::new(&roster_path, &weekly_data_path)?;
 
-fn parse_recipients(recipients: &str) -> Vec<String> {
-    recipients
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .collect()
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load environment variables from .env file
-    dotenv().ok();
-
-    // Load SMTP configuration
-    let config = load_config()?;
-    println!("Loaded config: {:?}", config);
-
-    // Load SMTP password from environment variable
-    let password = env::var("SMTP_PASSWORD")?;
-
-    // Parse recipients
-    let to_recipients = parse_recipients(&config.to);
-    let cc_recipients = parse_recipients(&config.cc);
-
-    // Combine all recipients (TO, CC, BCC)
-    let all_recipients = [to_recipients, cc_recipients]
-        .concat();
-
-    // Connect to the SMTP server (e.g., Gmail's SMTP server)
-    let mut stream = TcpStream::connect("smtp.gmail.com:587")?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-
-    // Read the server's welcome message
-    let mut response = [0; 512];
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Send EHLO command
-    stream.write_all(b"EHLO example.com\r\n")?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Send STARTTLS command
-    stream.write_all(b"STARTTLS\r\n")?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Upgrade the connection to TLS
-    let connector = TlsConnector::new()?;
-    let mut stream = connector.connect("smtp.gmail.com", stream)?;
-
-    // Re-send EHLO after STARTTLS
-    stream.write_all(b"EHLO example.com\r\n")?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Authenticate using AUTH LOGIN
-    stream.write_all(b"AUTH LOGIN\r\n")?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Send base64-encoded username (your Gmail address)
-    let username = encode(&config.sender);
-    stream.write_all(format!("{}\r\n", username).as_bytes())?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Send base64-encoded password (from .env file)
-    let password_encoded = encode(&password);
-    stream.write_all(format!("{}\r\n", password_encoded).as_bytes())?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Send MAIL FROM command
-    stream.write_all(format!("MAIL FROM:<{}>\r\n", config.sender).as_bytes())?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Send RCPT TO commands for all recipients
-    for recipient in all_recipients {
-        stream.write_all(format!("RCPT TO:<{}>\r\n", recipient).as_bytes())?;
-        stream.read(&mut response)?;
-        println!("Server: {}", String::from_utf8_lossy(&response));
+    if args.len() < 2 {
+        print_usage();
+        return Ok(());
     }
 
-    // Send DATA command
-    stream.write_all(b"DATA\r\n")?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Send email headers and body
-    let email_body = format!(
-        "From: {}\r\n\
-         To: {}\r\n\
-         CC: {}\r\n\
-         Subject: Hello from Rust!\r\n\
-         \r\n\
-         This is a test email sent using raw SMTP in Rust.\r\n.\r\n",
-        config.sender,
-        config.to,
-        config.cc
-    );
-    stream.write_all(email_body.as_bytes())?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
-
-    // Send QUIT command
-    stream.write_all(b"QUIT\r\n")?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
+    match args[1].as_str() {
+        "add-student" => {
+            if args.len() < 5 {
+                println!("Usage: {} add-student <andrew_id> <name> <email>", args[0]);
+                return Ok(());
+            }
+            manager.add_student(args[2].clone(), args[3].clone(), args[4].clone())?;
+            println!("Student added successfully.");
+        },
+        "remove-student" => {
+            if args.len() < 3 {
+                println!("Usage: {} remove-student <andrew_id>", args[0]);
+                return Ok(());
+            }
+            manager.remove_student(&args[2])?;
+            println!("Student removed successfully.");
+        },
+        "mark-excused" => {
+            if args.len() < 3 {
+                println!("Usage: {} mark-excused <andrew_id>", args[0]);
+                return Ok(());
+            }
+            manager.mark_excused(&args[2])?;
+            println!("Student marked as excused.");
+        },
+        "mark-attended" => {
+            if args.len() < 3 {
+                println!("Usage: {} mark-attended <andrew_id>", args[0]);
+                return Ok(());
+            }
+            manager.mark_attended(&args[2])?;
+            println!("Student marked as attended.");
+        },
+        "list-unexcused" => {
+            let unexcused = manager.get_unexcused_absentees();
+            println!("Unexcused absentees:");
+            for (id, student) in unexcused {
+                println!("{}: {} ({})", id, student.name, student.email);
+            }
+        },
+        "email-unexcused" => {
+            manager.email_unexcused_absentees()?;
+        },
+        "reset-week" => {
+            manager.reset_weekly_data()?;
+            println!("Weekly data reset successfully.");
+        },
+        "bump-week" => {
+            manager.bump_week()?;
+            println!("Week bumped successfully.");
+        },
+        _ => {
+            print_usage();
+        }
+    }
 
     Ok(())
+}
+
+fn print_usage() {
+    println!("Usage:");
+    println!("  program add-student <andrew_id> <name> <email>");
+    println!("  program remove-student <andrew_id>");
+    println!("  program mark-excused <andrew_id>");
+    println!("  program mark-attended <andrew_id>");
+    println!("  program list-unexcused");
+    println!("  program email-unexcused");
+    println!("  program reset-week");
+    println!("  program bump-week");
 }

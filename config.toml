@@ -1,4 +1,7 @@
 [smtp]
 sender = "xtremelysecret@gmail.com"
-to = "essicaran@gmail.com"
 cc = "cjtsui@andrew.cmu.edu,jwruan@andrew.cmu.edu,terrancc@andrew.cmu.edu,frf@andrew.cmu.edu"
+
+[attendance_manager]
+roster_path = "./roster.json.example"
+weekly_data_path = "./weekly_data.json.example"
