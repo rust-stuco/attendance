@@ -4,6 +4,7 @@ use dotenv::dotenv;
 use native_tls::TlsConnector;
 use serde::Deserialize;
 use std::env;
+use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
@@ -17,6 +18,8 @@ struct SmtpConfig {
 struct SmtpDetails {
     sender: String,
     cc: String,
+    email_subject: String,
+    email_body_path: String,
 }
 
 fn load_config() -> Result<SmtpDetails, Box<dyn std::error::Error>> {
@@ -36,6 +39,11 @@ fn parse_recipients(recipients: &str) -> Vec<String> {
         .split(',')
         .map(|s| s.trim().to_string())
         .collect()
+}
+
+fn read_email_body(file_path: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let body = fs::read_to_string(file_path)?;
+    Ok(body)
 }
 
 pub fn send_mail(to_recipients: &Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
@@ -117,16 +125,20 @@ pub fn send_mail(to_recipients: &Vec<String>) -> Result<(), Box<dyn std::error::
     println!("Server: {}", String::from_utf8_lossy(&response));
 
     // Send email headers and body
-    let email_body = format!(
+    let email_body = read_email_body(&config.email_body_path)?;
+    let email_headers = format!(
         "From: {}\r\n\
          To: undisclosed-recipients\r\n\
          CC: {}\r\n\
-         Subject: Hello from Rust!\r\n\
-         \r\n\
-         This is a test email sent using raw SMTP in Rust.\r\n.\r\n",
-        config.sender, config.cc
+         Subject: {}\r\n\
+         Content-Type: text/html; charset=UTF-8\r\n\
+         \r\n",
+        config.sender, config.cc, config.email_subject
     );
+
+    stream.write_all(email_headers.as_bytes())?;
     stream.write_all(email_body.as_bytes())?;
+    stream.write_all(b"\r\n.\r\n")?; // End of email
     stream.read(&mut response)?;
     println!("Server: {}", String::from_utf8_lossy(&response));
 

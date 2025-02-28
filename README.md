@@ -6,7 +6,7 @@ Previously a Google Apps Script that twiddled Google Sheets cells, now a full-fl
 
 ## Mailer Setup
 
-You can set the sender and CC'd email addresses in `config.toml`.
+In `config.toml`, you can set the sender, CC'd contacts, and email body.
 
 As of now, sender must use Gmail SMTP! Recipients and CC'd can be any.
 
@@ -19,7 +19,7 @@ As of now, sender must use Gmail SMTP! Recipients and CC'd can be any.
 
 Next, create your `roster.json` and `weekly_data.json` files and update their paths in `config.toml` accordingly.
 
-`roster.json.example` and `weekly_data.json.example` have been included for reference.
+See `examples` for reference of how these json files are structured.
 
 # Usage
 
