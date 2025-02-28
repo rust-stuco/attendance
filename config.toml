@@ -1,0 +1,3 @@
+[smtp]
+sender = "you@gmail.com"
+receiver = "recipient@gmail.com"
