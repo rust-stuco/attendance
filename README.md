@@ -23,11 +23,16 @@ Next, create your `roster.json` and `weekly_data.json` files and update their pa
 
 # Usage
 
-1. Run `bump-week` and `reset-week` at the beginning of each week. These steps are important! `bump-week` increments the current week, and `reset-week` creates an empty entry for the current week number.
+1. Run `bump-week` at the beginning of each week.
 2. Update the roster and excused absences with `add-student` `remove-student`, `mark-excused`, `mark-attended` respectively.
 3. Before you email, you can view the unexcused absences with `list-unexcused`.
 4. Then, when it comes time to email absentees, pull the trigger with `email-unexcused`. A final confirmation prompt will appear, as an extra layer of protection against accidental emails.
 
+You can list all available commands by running the tool with blank or invalid commands. Some other commands you may want to use:
+* `aggregate-stats` calculates the number of unexcused absences for each student
+* `flag-at-risk` filters for students with unexcused absences above the threshold 2
+* `show-week` for summary of weekly data
+* `set-week <week_number>` to navigate to an older week
 
 # TODO
 

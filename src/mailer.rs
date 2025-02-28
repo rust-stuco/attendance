@@ -1,12 +1,12 @@
+use base64::encode;
+use config::Config;
+use dotenv::dotenv;
 use native_tls::TlsConnector;
+use serde::Deserialize;
+use std::env;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
-use base64::encode;
-use dotenv::dotenv;
-use config::Config;
-use serde::Deserialize;
-use std::env;
 
 #[derive(Debug, Deserialize)]
 struct SmtpConfig {
@@ -16,7 +16,7 @@ struct SmtpConfig {
 #[derive(Debug, Deserialize)]
 struct SmtpDetails {
     sender: String,
-    cc: String
+    cc: String,
 }
 
 fn load_config() -> Result<SmtpDetails, Box<dyn std::error::Error>> {
@@ -51,8 +51,7 @@ pub fn send_mail(to_recipients: &Vec<String>) -> Result<(), Box<dyn std::error::
 
     // Combine all recipients (TO, CC)
     let cc_recipients = parse_recipients(&config.cc);
-    let all_recipients = [to_recipients.clone(), cc_recipients]
-        .concat();
+    let all_recipients = [to_recipients.clone(), cc_recipients].concat();
 
     // Connect to the SMTP server (e.g., Gmail's SMTP server)
     let mut stream = TcpStream::connect("smtp.gmail.com:587")?;
@@ -125,8 +124,7 @@ pub fn send_mail(to_recipients: &Vec<String>) -> Result<(), Box<dyn std::error::
          Subject: Hello from Rust!\r\n\
          \r\n\
          This is a test email sent using raw SMTP in Rust.\r\n.\r\n",
-        config.sender,
-        config.cc
+        config.sender, config.cc
     );
     stream.write_all(email_body.as_bytes())?;
     stream.read(&mut response)?;
