@@ -205,6 +205,37 @@ impl AttendanceManager {
         Ok(())
     }
 
+    pub fn bulk_mark_attended(&mut self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let content = std::fs::read_to_string(path)?;
+        let mut errors = Vec::new();
+
+        for (line_num, line) in content.lines().enumerate() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            let andrew_id = if line.contains('@') {
+                line.split('@').next().unwrap_or(line).to_string()
+            } else {
+                line.to_string()
+            };
+
+            if let Err(e) = self.mark_attended(&andrew_id) {
+                errors.push(format!("Line {}: {} - {}", line_num + 1, andrew_id, e));
+            }
+        }
+        if !errors.is_empty() {
+            return Err(format!(
+                "Errors occurred during bulk marking:\n{}",
+                errors.join("\n")
+            )
+            .into());
+        }
+
+        Ok(())
+    }
+
     pub fn reset_weekly_data(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let current_week = self.weekly_data.current_week;
         self.weekly_data

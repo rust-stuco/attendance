@@ -14,6 +14,7 @@ fn print_usage() {
     println!("  program remove-student <andrew_id>");
     println!("  program mark-excused <andrew_id>");
     println!("  program mark-attended <andrew_id>");
+    println!("  program bulk-mark-attended <file_path>");
     println!("  program list-unexcused");
     println!("  program email-unexcused");
     println!("  program set-week <week_number>");
@@ -65,6 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             manager.mark_excused(&args[2])?;
             println!("Student marked as excused.");
+            print_weekly_summary(&manager);
         }
         "mark-attended" => {
             if args.len() < 3 {
@@ -73,6 +75,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             manager.mark_attended(&args[2])?;
             println!("Student marked as attended.");
+            print_weekly_summary(&manager);
+        }
+        "bulk-mark-attended" => {
+            if args.len() < 3 {
+                println!("Usage: {} bulk-mark-attended <file_path>", args[0]);
+                return Ok(());
+            }
+            let path = &args[2];
+            manager.bulk_mark_attended(path)?;
+            println!("Bulk attendance marked successfully.");
+            print_weekly_summary(&manager);
         }
         "list-unexcused" => {
             let unexcused = manager.get_unexcused_absentees();
