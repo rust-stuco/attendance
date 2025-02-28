@@ -1,3 +1,4 @@
 [smtp]
-sender = "you@gmail.com"
-receiver = "recipient@gmail.com"
+sender = "xtremelysecret@gmail.com"
+to = "essicaran@gmail.com"
+cc = "cjtsui@andrew.cmu.edu,jwruan@andrew.cmu.edu,terrancc@andrew.cmu.edu,frf@andrew.cmu.edu"

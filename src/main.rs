@@ -16,7 +16,8 @@ struct SmtpConfig {
 #[derive(Debug, Deserialize)]
 struct SmtpDetails {
     sender: String,
-    receiver: String,
+    to: String,
+    cc: String
 }
 
 fn load_config() -> Result<SmtpDetails, Box<dyn std::error::Error>> {
@@ -31,6 +32,13 @@ fn load_config() -> Result<SmtpDetails, Box<dyn std::error::Error>> {
     Ok(smtp_config.smtp)
 }
 
+fn parse_recipients(recipients: &str) -> Vec<String> {
+    recipients
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .collect()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load environment variables from .env file
     dotenv().ok();
@@ -41,6 +49,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load SMTP password from environment variable
     let password = env::var("SMTP_PASSWORD")?;
+
+    // Parse recipients
+    let to_recipients = parse_recipients(&config.to);
+    let cc_recipients = parse_recipients(&config.cc);
+
+    // Combine all recipients (TO, CC, BCC)
+    let all_recipients = [to_recipients, cc_recipients]
+        .concat();
 
     // Connect to the SMTP server (e.g., Gmail's SMTP server)
     let mut stream = TcpStream::connect("smtp.gmail.com:587")?;
@@ -93,10 +109,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     stream.read(&mut response)?;
     println!("Server: {}", String::from_utf8_lossy(&response));
 
-    // Send RCPT TO command
-    stream.write_all(format!("RCPT TO:<{}>\r\n", config.receiver).as_bytes())?;
-    stream.read(&mut response)?;
-    println!("Server: {}", String::from_utf8_lossy(&response));
+    // Send RCPT TO commands for all recipients
+    for recipient in all_recipients {
+        stream.write_all(format!("RCPT TO:<{}>\r\n", recipient).as_bytes())?;
+        stream.read(&mut response)?;
+        println!("Server: {}", String::from_utf8_lossy(&response));
+    }
 
     // Send DATA command
     stream.write_all(b"DATA\r\n")?;
@@ -107,10 +125,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let email_body = format!(
         "From: {}\r\n\
          To: {}\r\n\
+         CC: {}\r\n\
          Subject: Hello from Rust!\r\n\
          \r\n\
          This is a test email sent using raw SMTP in Rust.\r\n.\r\n",
-        config.sender, config.receiver
+        config.sender,
+        config.to,
+        config.cc
     );
     stream.write_all(email_body.as_bytes())?;
     stream.read(&mut response)?;
