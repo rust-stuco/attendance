@@ -207,10 +207,9 @@ impl AttendanceManager {
             return Ok(());
         }
         
-        // TODO add option to cancel before mailing
         println!("Will email the following students: {:?}", recipient_emails);
         print!("Proceed? y/[N]: ");
-        io::stdout().flush()?; // Flush to ensure prompt is shown
+        io::stdout().flush()?;
 
         let mut user_input = String::new();
         io::stdin().read_line(&mut user_input)?;

@@ -120,13 +120,12 @@ pub fn send_mail(to_recipients: &Vec<String>) -> Result<(), Box<dyn std::error::
     // Send email headers and body
     let email_body = format!(
         "From: {}\r\n\
-         To: {:?}\r\n\
+         To: undisclosed-recipients\r\n\
          CC: {}\r\n\
          Subject: Hello from Rust!\r\n\
          \r\n\
          This is a test email sent using raw SMTP in Rust.\r\n.\r\n",
         config.sender,
-        to_recipients,
         config.cc
     );
     stream.write_all(email_body.as_bytes())?;
