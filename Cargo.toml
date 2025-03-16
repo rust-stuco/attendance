@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 base64 = "0.22.1"
+clap = { version = "4.5.32", features = ["derive"] }
 config = "0.15.8"
 dotenv = "0.15.0"
 native-tls = "0.2.14"

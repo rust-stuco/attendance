@@ -1,6 +1,7 @@
 mod mailer;
 mod roster;
 
+use clap::{Args, Parser, Subcommand};
 use config::Config;
 use roster::AttendanceManager;
 use std::error::Error;
@@ -8,21 +9,82 @@ use std::error::Error;
 const COLOR_RESET: &str = "\x1b[0m";
 const COLOR_CURRENT_WEEK: &str = "\x1b[1;32m"; // bright green
 
-fn print_usage() {
-    println!("Usage:");
-    println!("  program add-student <andrew_id> <name> <email>");
-    println!("  program remove-student <andrew_id>");
-    println!("  program mark-excused <andrew_id>");
-    println!("  program mark-attended <andrew_id>");
-    println!("  program bulk-mark-attended <file_path>");
-    println!("  program list-unexcused");
-    println!("  program email-unexcused");
-    println!("  program set-week <week_number>");
-    println!("  program show-week");
-    println!("  program reset-week");
-    println!("  program bump-week");
-    println!("  program aggregate-stats");
-    println!("  program flag-at-risk");
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Add a new student to the roster
+    AddStudent(AddStudentArgs),
+
+    /// Remove a student from the roster
+    RemoveStudent(StudentIdArg),
+
+    /// Mark a student as excused for the current week
+    MarkExcused(StudentIdArg),
+
+    /// Mark a student as attended for the current week
+    MarkAttended(StudentIdArg),
+
+    /// Mark multiple students as attended from a file
+    BulkMarkAttended(FilePathArg),
+
+    /// List students with unexcused absences
+    ListUnexcused,
+
+    /// Email students with unexcused absences
+    EmailUnexcused,
+
+    /// Display the current week
+    ShowWeek,
+
+    /// Reset attendance data for the current week
+    ResetWeek,
+
+    /// Increment to the next week
+    BumpWeek,
+
+    /// Set the current week number
+    SetWeek(WeekArg),
+
+    /// Show aggregate absence statistics
+    AggregateStats,
+
+    /// Flag students at risk due to multiple absences
+    FlagAtRisk,
+}
+
+#[derive(Args)]
+struct AddStudentArgs {
+    /// Student's Andrew ID
+    andrew_id: String,
+
+    /// Student's full name
+    name: String,
+
+    /// Student's email address
+    email: String,
+}
+
+#[derive(Args)]
+struct StudentIdArg {
+    /// Student's Andrew ID
+    andrew_id: String,
+}
+
+#[derive(Args)]
+struct FilePathArg {
+    /// Path to file containing Andrew IDs
+    file_path: String,
+}
+
+#[derive(Args)]
+struct WeekArg {
+    /// Week number to set as current
+    week_number: u32,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -34,95 +96,69 @@ fn main() -> Result<(), Box<dyn Error>> {
     let roster_path = settings.get_string("attendance_manager.roster_path")?;
     let weekly_data_path = settings.get_string("attendance_manager.weekly_data_path")?;
 
-    let args: Vec<String> = std::env::args().collect();
     let mut manager = AttendanceManager::new(&roster_path, &weekly_data_path)?;
 
-    if args.len() < 2 {
-        print_usage();
-        return Ok(());
-    }
+    let cli = Cli::parse();
 
-    match args[1].as_str() {
-        "add-student" => {
-            if args.len() < 5 {
-                println!("Usage: {} add-student <andrew_id> <name> <email>", args[0]);
-                return Ok(());
-            }
-            manager.add_student(args[2].clone(), args[3].clone(), args[4].clone())?;
+    match &cli.command {
+        Commands::AddStudent(args) => {
+            manager.add_student(
+                args.andrew_id.clone(),
+                args.name.clone(),
+                args.email.clone(),
+            )?;
             println!("Student added successfully.");
         }
-        "remove-student" => {
-            if args.len() < 3 {
-                println!("Usage: {} remove-student <andrew_id>", args[0]);
-                return Ok(());
-            }
-            manager.remove_student(&args[2])?;
+        Commands::RemoveStudent(args) => {
+            manager.remove_student(&args.andrew_id)?;
             println!("Student removed successfully.");
         }
-        "mark-excused" => {
-            if args.len() < 3 {
-                println!("Usage: {} mark-excused <andrew_id>", args[0]);
-                return Ok(());
-            }
-            manager.mark_excused(&args[2])?;
+        Commands::MarkExcused(args) => {
+            manager.mark_excused(&args.andrew_id)?;
             println!("Student marked as excused.");
             print_weekly_summary(&manager);
         }
-        "mark-attended" => {
-            if args.len() < 3 {
-                println!("Usage: {} mark-attended <andrew_id>", args[0]);
-                return Ok(());
-            }
-            manager.mark_attended(&args[2])?;
+        Commands::MarkAttended(args) => {
+            manager.mark_attended(&args.andrew_id)?;
             println!("Student marked as attended.");
             print_weekly_summary(&manager);
         }
-        "bulk-mark-attended" => {
-            if args.len() < 3 {
-                println!("Usage: {} bulk-mark-attended <file_path>", args[0]);
-                return Ok(());
-            }
-            let path = &args[2];
-            manager.bulk_mark_attended(path)?;
+        Commands::BulkMarkAttended(args) => {
+            manager.bulk_mark_attended(&args.file_path)?;
             println!("Bulk attendance marked successfully.");
             print_weekly_summary(&manager);
         }
-        "list-unexcused" => {
+        Commands::ListUnexcused => {
             let unexcused = manager.get_unexcused_absentees();
             println!("Unexcused absentees:");
             for (id, student) in unexcused {
                 println!("{}: {} ({})", id, student.name, student.email);
             }
         }
-        "email-unexcused" => {
+        Commands::EmailUnexcused => {
             manager.email_unexcused_absentees()?;
         }
-        "show-week" => {
+        Commands::ShowWeek => {
             print_weekly_summary(&manager);
         }
-        "bump-week" => {
+        Commands::BumpWeek => {
             manager.bump_week()?;
             println!("Week bumped successfully.");
             print_weekly_summary(&manager);
         }
-        "reset-week" => {
+        Commands::ResetWeek => {
             manager.reset_weekly_data()?;
             println!("Weekly data reset successfully.");
             print_weekly_summary(&manager);
         }
-        "set-week" => {
-            if args.len() < 3 {
-                println!("Usage: {} set-week <new_week_number>", args[0]);
-                return Ok(());
-            }
-            let new_week: u32 = args[2].parse()?;
-            match manager.set_current_week(new_week) {
-                Ok(_) => println!("Set current week to {}", new_week),
+        Commands::SetWeek(args) => {
+            match manager.set_current_week(args.week_number) {
+                Ok(_) => println!("Set current week to {}", args.week_number),
                 Err(e) => eprintln!("Error: {}", e),
             };
             print_weekly_summary(&manager);
         }
-        "aggregate-stats" => {
+        Commands::AggregateStats => {
             let counts = manager.aggregate_unexcused();
             println!("Unexcused absences:");
             let mut sorted: Vec<_> = counts.iter().collect();
@@ -133,7 +169,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 println!("- {}: {} absences", andrew_id, count);
             }
         }
-        "flag-at-risk" => {
+        Commands::FlagAtRisk => {
             let (_, warnings) = manager.aggregate_unexcused_with_warning(2);
             if !warnings.is_empty() {
                 println!("Students at risk:");
@@ -141,9 +177,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!("! {} has {} unexcused absences", andrew_id, count);
                 }
             }
-        }
-        _ => {
-            print_usage();
         }
     }
 
