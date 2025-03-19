@@ -1,11 +1,13 @@
+use crate::Student;
 use crate::cli::Command;
 use anyhow::{Result, bail};
+use config::Config;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const COLOR_RESET: &str = "\x1b[0m";
 const COLOR_CURRENT_WEEK: &str = "\x1b[1;32m"; // bright green
@@ -14,27 +16,27 @@ type AndrewId = String;
 type Roster = HashMap<AndrewId, Student>;
 
 pub struct AttendanceManager {
-    roster_path: String,
-    weekly_data_path: String,
+    roster_path: PathBuf,
+    weekly_data_path: PathBuf,
     roster: Roster,
     weekly_data: WeeklyDataFile,
 }
 
-#[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
-pub struct Student {
-    pub name: String,
-    pub email: String,
+#[derive(Debug, Serialize, Deserialize)]
+struct WeeklyDataFile {
+    current_week: u8,
+    weekly_data: HashMap<u8, WeeklyData>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct WeeklyData {
-    week: u32,
+    week: u8,
     excused: HashSet<AndrewId>,
     attended: HashSet<AndrewId>,
 }
 
 impl WeeklyData {
-    fn new(week: u32) -> Self {
+    fn new(week: u8) -> Self {
         Self {
             week,
             excused: HashSet::new(),
@@ -50,22 +52,19 @@ impl WeeklyData {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct WeeklyDataFile {
-    current_week: u32,
-    weekly_data: HashMap<u32, WeeklyData>,
-}
-
 impl AttendanceManager {
-    pub fn new(roster_path: &str, weekly_data_path: &str) -> Result<Self> {
-        if !Path::new(roster_path).exists() {
+    pub fn new(
+        roster_path: &impl AsRef<Path>,
+        weekly_data_path: &impl AsRef<Path>,
+    ) -> Result<Self> {
+        if !roster_path.as_ref().exists() {
             let empty_roster: Roster = HashMap::new();
             let json = serde_json::to_string_pretty(&empty_roster)?;
             let mut file = File::create(roster_path)?;
             file.write_all(json.as_bytes())?;
         }
 
-        if !Path::new(weekly_data_path).exists() {
+        if !weekly_data_path.as_ref().exists() {
             let empty_data = WeeklyDataFile {
                 current_week: 1,
                 weekly_data: HashMap::new(),
@@ -87,44 +86,53 @@ impl AttendanceManager {
         let weekly_data: WeeklyDataFile = serde_json::from_str(&contents)?;
 
         Ok(Self {
-            roster_path: roster_path.to_string(),
-            weekly_data_path: weekly_data_path.to_string(),
+            roster_path: roster_path.as_ref().to_owned(),
+            weekly_data_path: weekly_data_path.as_ref().to_owned(),
             roster,
             weekly_data,
         })
     }
 
+    /// Create a new `AttendanceManager` with default configuration from `config.toml`.
+    pub fn default_config_manager() -> Result<Self> {
+        // Load configuration from `config.toml`.
+        let settings = Config::builder()
+            .add_source(config::File::with_name("config"))
+            .build()?;
+
+        let roster_path = settings.get_string("attendance_manager.roster_path")?;
+        let weekly_data_path = settings.get_string("attendance_manager.weekly_data_path")?;
+
+        AttendanceManager::new(&roster_path, &weekly_data_path)
+    }
+
     pub fn run_command(&mut self, command: &Command) -> Result<()> {
         match command {
-            Command::AddStudent(args) => {
-                self.add_student(
-                    args.andrew_id.clone(),
-                    args.name.clone(),
-                    args.email.clone(),
-                )?;
-                println!("Student {} added successfully.", args.andrew_id);
+            Command::AddStudent(student) => {
+                self.add_student(student)?;
+                println!("Student {} added successfully.", student.andrew_id);
             }
-            Command::RemoveStudent(args) => {
-                self.remove_student(&args.andrew_id)?;
-                println!("Student {} removed successfully.", args.andrew_id);
+            Command::RemoveStudent(student) => {
+                self.remove_student(&student.andrew_id)?;
+                println!("Student {} removed successfully.", student.andrew_id);
             }
-            Command::MarkExcused(args) => {
-                self.mark_excused(&args.andrew_id)?;
-                println!("Student {} marked as excused.", args.andrew_id);
+            Command::MarkExcused(student) => {
+                self.mark_excused(&student.andrew_id)?;
+                println!("Student {} marked as excused.", student.andrew_id);
             }
-            Command::MarkAttended(args) => {
-                self.mark_attended(&args.andrew_id)?;
-                println!("Student {} marked as attended.", args.andrew_id);
+            Command::MarkAttended(student) => {
+                self.mark_attended(&student.andrew_id)?;
+                println!("Student {} marked as attended.", student.andrew_id);
             }
-            Command::BulkMarkAttended(args) => {
-                self.bulk_mark_attended(&args.file_path)?;
+            Command::BulkMarkAttended { file_path } => {
+                self.bulk_mark_attended(&file_path)?;
                 println!("Bulk attendance marked successfully.");
             }
             Command::ListUnexcused => {
                 let unexcused = self.get_unexcused_absentees();
                 println!("Unexcused absentees:");
                 for (id, student) in unexcused {
-                    println!("{}: {} ({})", id, student.name, student.email);
+                    println!("{}: {:?}", id, student.name);
                 }
             }
             Command::EmailUnexcused => {
@@ -139,9 +147,9 @@ impl AttendanceManager {
                 self.reset_weekly_data()?;
                 println!("Weekly data reset successfully.");
             }
-            Command::SetWeek(args) => {
-                match self.set_current_week(args.week_number) {
-                    Ok(_) => println!("Set current week to {}", args.week_number),
+            Command::SetWeek { week } => {
+                match self.set_current_week(*week) {
+                    Ok(_) => println!("Set current week to {}", week),
                     Err(e) => eprintln!("Error: {}", e),
                 };
             }
@@ -194,8 +202,9 @@ impl AttendanceManager {
         Ok(())
     }
 
-    pub fn add_student(&mut self, andrew_id: AndrewId, name: String, email: String) -> Result<()> {
-        self.roster.insert(andrew_id, Student { name, email });
+    pub fn add_student(&mut self, student: &Student) -> Result<()> {
+        self.roster
+            .insert(student.andrew_id.clone(), student.clone());
         self.save_roster()?;
         Ok(())
     }
@@ -256,7 +265,7 @@ impl AttendanceManager {
         Ok(())
     }
 
-    pub fn bulk_mark_attended(&mut self, path: &str) -> Result<()> {
+    pub fn bulk_mark_attended(&mut self, path: &impl AsRef<Path>) -> Result<()> {
         let content = std::fs::read_to_string(path)?;
         let mut errors = Vec::new();
 
@@ -307,7 +316,7 @@ impl AttendanceManager {
         Ok(())
     }
 
-    pub fn set_current_week(&mut self, new_week: u32) -> Result<()> {
+    pub fn set_current_week(&mut self, new_week: u8) -> Result<()> {
         if !self.weekly_data.weekly_data.contains_key(&new_week) {
             bail!("Nonexistent week");
         }
@@ -331,11 +340,11 @@ impl AttendanceManager {
         Ok(())
     }
 
-    pub fn get_current_week(&self) -> u32 {
+    pub fn get_current_week(&self) -> u8 {
         self.weekly_data.current_week
     }
 
-    pub fn get_weekly_summary(&self) -> HashMap<u32, (usize, usize)> {
+    pub fn get_weekly_summary(&self) -> HashMap<u8, (usize, usize)> {
         self.weekly_data
             .weekly_data
             .iter()
@@ -362,7 +371,7 @@ impl AttendanceManager {
 
         let recipient_emails: Vec<String> = unexcused
             .iter()
-            .map(|(_, student)| student.email.clone())
+            .map(|(_, student)| student.email())
             .collect();
 
         if recipient_emails.is_empty() {

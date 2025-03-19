@@ -1,19 +1,26 @@
-use anyhow::Result;
-use config::Config;
+use clap::Args;
+use serde::{Deserialize, Serialize};
 
 pub mod cli;
 pub mod manager;
 
-use crate::manager::AttendanceManager;
+#[derive(Args, Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub struct Student {
+    /// Student's Andrew ID.
+    #[arg(short, long = "aid")]
+    pub andrew_id: String,
 
-pub fn create_default_manager() -> Result<AttendanceManager> {
-    // Load configuration from `config.toml`.
-    let settings = Config::builder()
-        .add_source(config::File::with_name("config"))
-        .build()?;
+    /// Student's name. Since this is not strictly necessary for management, it is optional.
+    #[arg(short, long)]
+    pub name: Option<String>,
+}
 
-    let roster_path = settings.get_string("attendance_manager.roster_path")?;
-    let weekly_data_path = settings.get_string("attendance_manager.weekly_data_path")?;
+impl Student {
+    pub fn new(andrew_id: String, name: Option<String>) -> Self {
+        Self { andrew_id, name }
+    }
 
-    AttendanceManager::new(&roster_path, &weekly_data_path)
+    pub fn email(&self) -> String {
+        format!("{}@andrew.cmu.edu", self.andrew_id)
+    }
 }
