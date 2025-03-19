@@ -1,36 +1,25 @@
+use crate::cli::Command;
 use crate::mailer;
-
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::{Read, Write};
 use std::path::Path;
 
+const COLOR_RESET: &str = "\x1b[0m";
+const COLOR_CURRENT_WEEK: &str = "\x1b[1;32m"; // bright green
+
 type AndrewId = String;
 type Roster = HashMap<AndrewId, Student>;
 
-#[derive(Debug)]
-pub enum AttendanceError {
-    NonexistentWeek(u32),
+pub struct AttendanceManager {
+    roster_path: String,
+    weekly_data_path: String,
+    roster: Roster,
+    weekly_data: WeeklyDataFile,
 }
-
-impl fmt::Display for AttendanceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AttendanceError::NonexistentWeek(week) => {
-                write!(
-                    f,
-                    "Week {} does not exist, consider creating it with bump-week",
-                    week
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for AttendanceError {}
 
 #[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct Student {
@@ -68,18 +57,8 @@ struct WeeklyDataFile {
     weekly_data: HashMap<u32, WeeklyData>,
 }
 
-pub struct AttendanceManager {
-    roster_path: String,
-    weekly_data_path: String,
-    roster: Roster,
-    weekly_data: WeeklyDataFile,
-}
-
 impl AttendanceManager {
-    pub fn new(
-        roster_path: &str,
-        weekly_data_path: &str,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(roster_path: &str, weekly_data_path: &str) -> Result<Self> {
         if !Path::new(roster_path).exists() {
             let empty_roster: Roster = HashMap::new();
             let json = serde_json::to_string_pretty(&empty_roster)?;
@@ -116,7 +95,85 @@ impl AttendanceManager {
         })
     }
 
-    fn save_roster(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run_command(&mut self, command: &Command) -> Result<()> {
+        match command {
+            Command::AddStudent(args) => {
+                self.add_student(
+                    args.andrew_id.clone(),
+                    args.name.clone(),
+                    args.email.clone(),
+                )?;
+                println!("Student {} added successfully.", args.andrew_id);
+            }
+            Command::RemoveStudent(args) => {
+                self.remove_student(&args.andrew_id)?;
+                println!("Student {} removed successfully.", args.andrew_id);
+            }
+            Command::MarkExcused(args) => {
+                self.mark_excused(&args.andrew_id)?;
+                println!("Student {} marked as excused.", args.andrew_id);
+            }
+            Command::MarkAttended(args) => {
+                self.mark_attended(&args.andrew_id)?;
+                println!("Student {} marked as attended.", args.andrew_id);
+            }
+            Command::BulkMarkAttended(args) => {
+                self.bulk_mark_attended(&args.file_path)?;
+                println!("Bulk attendance marked successfully.");
+            }
+            Command::ListUnexcused => {
+                let unexcused = self.get_unexcused_absentees();
+                println!("Unexcused absentees:");
+                for (id, student) in unexcused {
+                    println!("{}: {} ({})", id, student.name, student.email);
+                }
+            }
+            Command::EmailUnexcused => {
+                self.email_unexcused_absentees()?;
+            }
+            Command::ShowWeek => {}
+            Command::BumpWeek => {
+                self.bump_week()?;
+                println!("Week bumped successfully.");
+            }
+            Command::ResetWeek => {
+                self.reset_weekly_data()?;
+                println!("Weekly data reset successfully.");
+            }
+            Command::SetWeek(args) => {
+                match self.set_current_week(args.week_number) {
+                    Ok(_) => println!("Set current week to {}", args.week_number),
+                    Err(e) => eprintln!("Error: {}", e),
+                };
+            }
+            Command::AggregateStats => {
+                let counts = self.aggregate_unexcused();
+                println!("Unexcused absences:");
+                let mut sorted: Vec<_> = counts.iter().collect();
+                // Sort by highest count first, then alphabetically by `andrew_id`.
+                sorted.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+
+                for (andrew_id, count) in sorted {
+                    println!("- {}: {} absences", andrew_id, count);
+                }
+            }
+            Command::FlagAtRisk => {
+                let (_, warnings) = self.aggregate_unexcused_with_warning(2);
+                if !warnings.is_empty() {
+                    println!("Students at risk:");
+                    for (andrew_id, count) in warnings {
+                        println!("! {} has {} unexcused absences", andrew_id, count);
+                    }
+                }
+            }
+        }
+
+        self.print_weekly_summary();
+
+        Ok(())
+    }
+
+    fn save_roster(&self) -> Result<()> {
         let json = serde_json::to_string_pretty(&self.roster)?;
         let mut file = OpenOptions::new()
             .write(true)
@@ -127,7 +184,7 @@ impl AttendanceManager {
         Ok(())
     }
 
-    fn save_weekly_data(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn save_weekly_data(&self) -> Result<()> {
         let json = serde_json::to_string_pretty(&self.weekly_data)?;
         let mut file = OpenOptions::new()
             .write(true)
@@ -138,24 +195,19 @@ impl AttendanceManager {
         Ok(())
     }
 
-    pub fn add_student(
-        &mut self,
-        andrew_id: AndrewId,
-        name: String,
-        email: String,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn add_student(&mut self, andrew_id: AndrewId, name: String, email: String) -> Result<()> {
         self.roster.insert(andrew_id, Student { name, email });
         self.save_roster()?;
         Ok(())
     }
 
-    pub fn remove_student(&mut self, andrew_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn remove_student(&mut self, andrew_id: &str) -> Result<()> {
         self.roster.remove(andrew_id);
         self.save_roster()?;
         Ok(())
     }
 
-    pub fn mark_excused(&mut self, andrew_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn mark_excused(&mut self, andrew_id: &str) -> Result<()> {
         if self.roster.contains_key(andrew_id) {
             let current_week = self.weekly_data.current_week;
             let weekly_data = self
@@ -167,11 +219,11 @@ impl AttendanceManager {
             self.save_weekly_data()?;
             Ok(())
         } else {
-            Err("Student not found in roster".into())
+            bail!("Student not found in roster")
         }
     }
 
-    pub fn remove_excused(&mut self, andrew_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn remove_excused(&mut self, andrew_id: &str) -> Result<()> {
         let current_week = self.weekly_data.current_week;
         if let Some(weekly_data) = self.weekly_data.weekly_data.get_mut(&current_week) {
             weekly_data.excused.remove(andrew_id);
@@ -180,7 +232,7 @@ impl AttendanceManager {
         Ok(())
     }
 
-    pub fn mark_attended(&mut self, andrew_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn mark_attended(&mut self, andrew_id: &str) -> Result<()> {
         if self.roster.contains_key(andrew_id) {
             let current_week = self.weekly_data.current_week;
             let weekly_data = self
@@ -192,11 +244,11 @@ impl AttendanceManager {
             self.save_weekly_data()?;
             Ok(())
         } else {
-            Err("Student not found in roster".into())
+            bail!("Student not found in roster")
         }
     }
 
-    pub fn remove_attended(&mut self, andrew_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn remove_attended(&mut self, andrew_id: &str) -> Result<()> {
         let current_week = self.weekly_data.current_week;
         if let Some(weekly_data) = self.weekly_data.weekly_data.get_mut(&current_week) {
             weekly_data.attended.remove(andrew_id);
@@ -205,7 +257,7 @@ impl AttendanceManager {
         Ok(())
     }
 
-    pub fn bulk_mark_attended(&mut self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn bulk_mark_attended(&mut self, path: &str) -> Result<()> {
         let content = std::fs::read_to_string(path)?;
         let mut errors = Vec::new();
 
@@ -226,17 +278,16 @@ impl AttendanceManager {
             }
         }
         if !errors.is_empty() {
-            return Err(format!(
+            bail!(
                 "Errors occurred during bulk marking:\n{}",
                 errors.join("\n")
-            )
-            .into());
+            );
         }
 
         Ok(())
     }
 
-    pub fn reset_weekly_data(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn reset_weekly_data(&mut self) -> Result<()> {
         let current_week = self.weekly_data.current_week;
         self.weekly_data
             .weekly_data
@@ -245,7 +296,7 @@ impl AttendanceManager {
         Ok(())
     }
 
-    pub fn bump_week(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn bump_week(&mut self) -> Result<()> {
         let new_week = (self.weekly_data.weekly_data.len() + 1).try_into()?;
         self.weekly_data
             .weekly_data
@@ -257,9 +308,9 @@ impl AttendanceManager {
         Ok(())
     }
 
-    pub fn set_current_week(&mut self, new_week: u32) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn set_current_week(&mut self, new_week: u32) -> Result<()> {
         if !self.weekly_data.weekly_data.contains_key(&new_week) {
-            return Err(Box::new(AttendanceError::NonexistentWeek(new_week)));
+            bail!("Nonexistent week");
         }
         if new_week <= self.weekly_data.current_week {
             println!(
@@ -282,7 +333,7 @@ impl AttendanceManager {
     }
 
     pub fn get_current_week(&self) -> u32 {
-        return self.weekly_data.current_week;
+        self.weekly_data.current_week
     }
 
     pub fn get_weekly_summary(&self) -> HashMap<u32, (usize, usize)> {
@@ -295,18 +346,19 @@ impl AttendanceManager {
 
     pub fn get_unexcused_absentees(&self) -> Vec<(&AndrewId, &Student)> {
         let current_week = self.weekly_data.current_week;
-        if let Some(weekly_data) = self.weekly_data.weekly_data.get(&current_week) {
-            let unexcused_ids = weekly_data.get_unexcused_absences(&self.roster);
-            unexcused_ids
-                .into_iter()
-                .filter_map(|id| self.roster.get_key_value(id))
-                .collect()
-        } else {
-            Vec::new()
+        match self.weekly_data.weekly_data.get(&current_week) {
+            Some(weekly_data) => {
+                let unexcused_ids = weekly_data.get_unexcused_absences(&self.roster);
+                unexcused_ids
+                    .into_iter()
+                    .filter_map(|id| self.roster.get_key_value(id))
+                    .collect()
+            }
+            _ => Vec::new(),
         }
     }
 
-    pub fn email_unexcused_absentees(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn email_unexcused_absentees(&self) -> Result<()> {
         let unexcused = self.get_unexcused_absentees();
 
         let recipient_emails: Vec<String> = unexcused
@@ -363,10 +415,34 @@ impl AttendanceManager {
         let counts = self.aggregate_unexcused();
         let warnings: Vec<_> = counts
             .iter()
-            .filter(|(_, &count)| count >= warning_threshold)
+            .filter(|&(_, &count)| count >= warning_threshold)
             .map(|(s, c)| (*s, *c))
             .collect();
 
         (counts, warnings)
+    }
+
+    pub fn print_weekly_summary(&self) {
+        let current_week = self.get_current_week();
+        let weekly_summary = self.get_weekly_summary();
+        println!("\nWeekly Data Summary:");
+
+        let mut weeks: Vec<_> = weekly_summary.iter().collect();
+        weeks.sort_by_key(|(k, _)| *k);
+
+        for (week, (excused, attended)) in weeks {
+            let is_current = *week == current_week;
+
+            let status = if is_current { " (current)" } else { "" };
+            let week_color = if is_current {
+                COLOR_CURRENT_WEEK
+            } else {
+                COLOR_RESET
+            };
+            println!(
+                "{}Week {}{}: {} excused, {} attended",
+                week_color, week, status, excused, attended
+            );
+        }
     }
 }
