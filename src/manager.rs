@@ -1,5 +1,4 @@
 use crate::cli::Command;
-use crate::mailer;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -384,8 +383,9 @@ impl AttendanceManager {
             return Ok(());
         }
 
-        mailer::send_mail(&recipient_emails)?;
-        Ok(())
+        // mailer::send_mail(&recipient_emails)?;
+        todo!();
+        // Ok(())
     }
 
     pub fn aggregate_unexcused(&self) -> HashMap<&AndrewId, u32> {

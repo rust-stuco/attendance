@@ -2,7 +2,6 @@ use anyhow::Result;
 use config::Config;
 
 pub mod cli;
-pub mod mailer;
 pub mod manager;
 
 use crate::manager::AttendanceManager;
