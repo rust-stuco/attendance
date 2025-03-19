@@ -1,13 +1,8 @@
 [package]
 name = "absentee-tracker"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-base64 = "0.22.1"
-clap = { version = "4.5.32", features = ["derive"] }
-config = "0.15.8"
-dotenv = "0.15.0"
-native-tls = "0.2.14"
-serde = "1.0.218"
-serde_json = "1.0.139"
+diesel = { version = "2.2.0", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+dotenvy = "0.15"
