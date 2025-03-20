@@ -9,7 +9,7 @@ use serde::Deserialize;
 use std::fmt::Display;
 
 /// The attendance record for a student for a specific week.
-#[derive(Queryable, Selectable, Debug, Clone)]
+#[derive(Queryable, Selectable, Insertable, Debug, Clone)]
 #[diesel(table_name = attendance)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Attendance {
@@ -28,7 +28,7 @@ pub struct Attendance {
 ///
 /// Note that there are a lot more columns that the ones listed here, but the remaining columns
 /// aren't super interesting and are usually the same among every student.
-#[derive(Deserialize, Queryable, Selectable, Debug, Insertable, Clone, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Queryable, Selectable, Insertable, Debug, Clone, PartialEq, Eq, Hash)]
 #[diesel(table_name = students)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Student {

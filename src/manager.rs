@@ -1,4 +1,4 @@
-use crate::models::{Student, Week};
+use crate::models::{Attendance, Status, Student, Week};
 use crate::schema;
 use chrono::{Days, NaiveDate};
 use diesel::prelude::*;
@@ -46,6 +46,7 @@ impl AttendanceManager {
             .execute(&mut self.db)?;
 
         assert_eq!(students_inserted, new_students.len());
+
         Ok(())
     }
 
@@ -53,10 +54,20 @@ impl AttendanceManager {
     pub fn delete_student(&mut self, student_id: &str) -> QueryResult<Student> {
         use schema::students::dsl::*;
 
-        diesel::delete(schema::students::table)
+        let mut deleted_students = diesel::delete(schema::students::table)
             .filter(id.eq(student_id))
             .returning(Student::as_returning())
-            .get_result(&mut self.db)
+            .get_results(&mut self.db)?;
+
+        assert_eq!(
+            deleted_students.len(),
+            1,
+            "there shoudl only be 1 student per ID"
+        );
+
+        Ok(deleted_students
+            .pop()
+            .expect("we just checked this was not empty"))
     }
 
     /// Given the starting date and the list of valid weeks (since not all weeks may need to take
@@ -106,6 +117,50 @@ impl AttendanceManager {
         assert_eq!(weeks_inserted, total_weeks);
 
         Ok(())
+    }
+
+    fn mark(&mut self, week: i32, student_ids: &[&str], status: Status) -> QueryResult<()> {
+        let records: Vec<Attendance> = student_ids
+            .iter()
+            .map(|id| Attendance {
+                student: id.to_string(),
+                week,
+                status,
+            })
+            .collect();
+
+        // TODO: If the primary key already exists, then this needs to be an update, not an insert.
+        let records_inserted = diesel::insert_into(schema::attendance::table)
+            .values(records)
+            .execute(&mut self.db)?;
+
+        assert_eq!(records_inserted, student_ids.len());
+
+        Ok(())
+    }
+
+    /// Mark all of the given students as [`Status::Present`].
+    pub fn mark_present(&mut self, week: i32, student_ids: &[&str]) -> QueryResult<()> {
+        self.mark(week, student_ids, Status::Present)
+    }
+
+    /// Mark all of the given students as [`Status::Excused`].
+    pub fn mark_excused(&mut self, week: i32, student_ids: &[&str]) -> QueryResult<()> {
+        self.mark(week, student_ids, Status::Excused)
+    }
+
+    /// Given a specific week, mark every student who has not been marked as either
+    /// [`Status::Present`] or [`Status::Excused`] as [`Status::Absent`].
+    pub fn mark_absent(&mut self, week: i32) -> QueryResult<()> {
+        let roster = self.get_roster()?;
+
+        // Query for every record in the `attendance` table for the specific week.
+        // Find the people who have not been marked as present or excused.
+        // Mark them as absent.
+
+        todo!()
+
+        // self.mark(week, &[], Status::Absent)
     }
 }
 
