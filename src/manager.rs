@@ -13,8 +13,8 @@ pub struct AttendanceManager {
 
 impl AttendanceManager {
     /// Creates a new `AttendanceManager` by connecting to the a `sqlite3` instance located at the
-    /// `DATABAUSE_URL` environment variable.
-    pub fn new() -> Self {
+    /// `DATABASE_URL` environment variable.
+    pub fn connect() -> Self {
         dotenv().ok();
 
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -23,6 +23,20 @@ impl AttendanceManager {
             .unwrap_or_else(|_| panic!("Error connecting to {}", database_url));
 
         Self { db: connection }
+    }
+
+    /// Retrieves all students on the roster.
+    pub fn get_roster(&mut self) -> QueryResult<Vec<Student>> {
+        use schema::students::dsl::*;
+
+        students.select(Student::as_select()).load(&mut self.db)
+    }
+
+    /// Removes all students from the roster.
+    pub fn delete_roster(&mut self) -> QueryResult<Vec<Student>> {
+        diesel::delete(schema::students::table)
+            .returning(Student::as_returning())
+            .get_results(&mut self.db)
     }
 
     /// Inserts students into the database.
@@ -35,28 +49,14 @@ impl AttendanceManager {
         Ok(())
     }
 
-    /// Removes a student from the roster.
-    pub fn remove_student(&mut self, student_id: &str) -> QueryResult<Student> {
+    /// Removes a student from the roster given their ID.
+    pub fn delete_student(&mut self, student_id: &str) -> QueryResult<Student> {
         use schema::students::dsl::*;
 
         diesel::delete(schema::students::table)
             .filter(id.eq(student_id))
             .returning(Student::as_returning())
             .get_result(&mut self.db)
-    }
-
-    /// Removes all students from the roster.
-    pub fn remove_all_students(&mut self) -> QueryResult<Vec<Student>> {
-        diesel::delete(schema::students::table)
-            .returning(Student::as_returning())
-            .get_results(&mut self.db)
-    }
-
-    /// Retrieves all students on the roster.
-    pub fn roster(&mut self) -> QueryResult<Vec<Student>> {
-        use schema::students::dsl::*;
-
-        students.select(Student::as_select()).load(&mut self.db)
     }
 
     /// Given the starting date and the list of valid weeks (since not all weeks may need to take
@@ -104,6 +104,6 @@ impl AttendanceManager {
 
 impl Default for AttendanceManager {
     fn default() -> Self {
-        Self::new()
+        Self::connect()
     }
 }

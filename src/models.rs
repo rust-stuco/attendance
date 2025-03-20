@@ -5,6 +5,7 @@ use diesel::prelude::*;
 use diesel::serialize::{Output, ToSql};
 use diesel::sqlite::{Sqlite, SqliteValue};
 use diesel::{AsExpression, FromSqlRow, sql_types::Text};
+use serde::Deserialize;
 use std::fmt::Display;
 
 /// The attendance record for a student for a specific week.
@@ -12,22 +13,53 @@ use std::fmt::Display;
 #[diesel(table_name = attendance)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Attendance {
+    /// A foreign-key reference to a student's ID in the students table.
     pub student: String,
+    /// A foreign-key reference to a week's ID in the weeks table.
     pub week: i32,
+    /// The status of a student for a given week.
     pub status: Status,
 }
 
 /// An entry in the roster of students, representing a student in the class.
-#[derive(Debug, Queryable, Selectable, Insertable, PartialEq, Eq, Hash)]
+///
+/// This type is intended to be deserialized from the course CSV roster. You can get this roster by
+/// downloading off of the S3 admin page.
+///
+/// Note that there are a lot more columns that the ones listed here, but the remaining columns
+/// aren't super interesting and are usually the same among every student.
+#[derive(Debug, Deserialize, Queryable, Selectable, Insertable, PartialEq, Eq, Hash)]
 #[diesel(table_name = students)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Student {
+    #[serde(rename(deserialize = "Andrew ID"))]
     pub id: String,
+
+    #[serde(rename(deserialize = "Email"))]
     pub email: String,
+
+    #[serde(rename(deserialize = "Preferred/First Name"))]
     pub first_name: String,
+
+    #[serde(rename(deserialize = "MI"))]
+    pub middle_initial: String,
+
+    #[serde(rename(deserialize = "Last Name"))]
     pub last_name: String,
+
+    #[serde(rename(deserialize = "College"))]
+    pub college: String,
+
+    #[serde(rename(deserialize = "Department"))]
+    pub department: String,
+
+    #[serde(rename(deserialize = "Major"))]
     pub major: String,
+
+    #[serde(rename(deserialize = "Class"))]
     pub class: i32,
+
+    #[serde(rename(deserialize = "Graduation Semester"))]
     pub graduation_semester: String,
 }
 
