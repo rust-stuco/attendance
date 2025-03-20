@@ -92,6 +92,9 @@ impl AttendanceManager {
         /// The number of days in a week.
         const WEEK_DAYS: Days = Days::new(7);
 
+        // Clear the current `weeks` table.
+        diesel::delete(schema::weeks::table).execute(&mut self.db)?;
+
         let total_weeks = valid_weeks
             .iter()
             .filter(|&&is_valid_week| is_valid_week)
@@ -102,18 +105,19 @@ impl AttendanceManager {
 
         // Add dates for every week, skipping invalid weeks.
         valid_weeks.iter().for_each(|&is_valid_week| {
-            curr_date = curr_date
-                .checked_add_days(WEEK_DAYS)
-                .expect("Somehow reached the end of time");
-
             if is_valid_week {
                 let week = Week {
-                    id: dates.len() as i32,
+                    // Make sure to 1-index.
+                    id: dates.len() as i32 + 1,
                     date: curr_date,
                 };
 
                 dates.push(week);
             }
+
+            curr_date = curr_date
+                .checked_add_days(WEEK_DAYS)
+                .expect("Somehow reached the end of time");
         });
 
         assert_eq!(dates.len(), total_weeks);
@@ -155,11 +159,9 @@ impl AttendanceManager {
 
         // Mark the students with the given status.
         // If the record already exists, this simply updates the status.
-        let records_inserted = diesel::replace_into(schema::attendance::table)
+        diesel::replace_into(schema::attendance::table)
             .values(records)
             .execute(&mut self.db)?;
-
-        assert_eq!(records_inserted, student_ids.len());
 
         Ok(())
     }
