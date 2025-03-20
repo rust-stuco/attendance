@@ -32,7 +32,16 @@ impl AttendanceManager {
         students.select(Student::as_select()).load(&mut self.db)
     }
 
-    /// Removes all students from the roster.
+    /// Retrieves the IDs of all students on the roster.
+    pub fn get_roster_ids(&mut self) -> QueryResult<Vec<String>> {
+        Ok(self
+            .get_roster()?
+            .into_iter()
+            .map(|student| student.id.to_string())
+            .collect())
+    }
+
+    /// Removes and returns all students from the roster.
     pub fn delete_roster(&mut self) -> QueryResult<Vec<Student>> {
         diesel::delete(schema::students::table)
             .returning(Student::as_returning())
@@ -50,7 +59,7 @@ impl AttendanceManager {
         Ok(())
     }
 
-    /// Removes a student from the roster given their ID.
+    /// Removes and returns a student from the roster given their ID.
     pub fn delete_student(&mut self, student_id: &str) -> QueryResult<Student> {
         use schema::students::dsl::*;
 
@@ -119,9 +128,24 @@ impl AttendanceManager {
         Ok(())
     }
 
+    /// For a given week, mark all of the given students with the given [`Status`]. If that record
+    /// already exists, this will update that [`Status`].
+    ///
+    /// If `student_ids` contains an ID that is not on the roster, this function will ignore it.
     fn mark(&mut self, week: i32, student_ids: &[&str], status: Status) -> QueryResult<()> {
+        let roster = self.get_roster_ids()?;
+
+        // Note that we can't use `.contains` here beacuse roster is `Vec<String>`, not `Vec<&str>`.
         let records: Vec<Attendance> = student_ids
             .iter()
+            .filter(|&id| {
+                if roster.iter().any(|s| s == id) {
+                    true
+                } else {
+                    eprintln!("Tried to mark an unknown student {} as {:?}", id, status);
+                    false
+                }
+            })
             .map(|id| Attendance {
                 student: id.to_string(),
                 week,
@@ -129,8 +153,9 @@ impl AttendanceManager {
             })
             .collect();
 
-        // TODO: If the primary key already exists, then this needs to be an update, not an insert.
-        let records_inserted = diesel::insert_into(schema::attendance::table)
+        // Mark the students with the given status.
+        // If the record already exists, this simply updates the status.
+        let records_inserted = diesel::replace_into(schema::attendance::table)
             .values(records)
             .execute(&mut self.db)?;
 
@@ -139,28 +164,40 @@ impl AttendanceManager {
         Ok(())
     }
 
-    /// Mark all of the given students as [`Status::Present`].
+    /// For a given week, mark all of the given students as [`Status::Present`].
+    ///
+    /// If `student_ids` contains an ID that is not on the roster, this function will ignore it.
     pub fn mark_present(&mut self, week: i32, student_ids: &[&str]) -> QueryResult<()> {
         self.mark(week, student_ids, Status::Present)
     }
 
-    /// Mark all of the given students as [`Status::Excused`].
+    /// For a given week, mark all of the given students as [`Status::Excused`].
+    ///
+    /// If `student_ids` contains an ID that is not on the roster, this function will ignore it.
     pub fn mark_excused(&mut self, week: i32, student_ids: &[&str]) -> QueryResult<()> {
         self.mark(week, student_ids, Status::Excused)
     }
 
-    /// Given a specific week, mark every student who has not been marked as either
-    /// [`Status::Present`] or [`Status::Excused`] as [`Status::Absent`].
-    pub fn mark_absent(&mut self, week: i32) -> QueryResult<()> {
-        let roster = self.get_roster()?;
+    /// For a given week, mark every student who has not been marked as either [`Status::Present`]
+    /// or [`Status::Excused`] as [`Status::Absent`].
+    ///
+    /// Returns the number of students that were marked absent.
+    pub fn mark_remaining_absent(&mut self, week: i32) -> QueryResult<usize> {
+        let roster = self.get_roster_ids()?;
 
-        // Query for every record in the `attendance` table for the specific week.
-        // Find the people who have not been marked as present or excused.
-        // Mark them as absent.
+        let records: Vec<Attendance> = roster
+            .into_iter()
+            .map(|student| Attendance {
+                student,
+                week,
+                status: Status::Absent,
+            })
+            .collect();
 
-        todo!()
-
-        // self.mark(week, &[], Status::Absent)
+        // Inserts absent records for every student, but if the record already exists, do nothing.
+        diesel::insert_or_ignore_into(schema::attendance::table)
+            .values(records)
+            .execute(&mut self.db)
     }
 }
 
