@@ -18,7 +18,7 @@ pub struct Attendance {
 }
 
 /// An entry in the roster of students, representing a student in the class.
-#[derive(Debug, Queryable, Selectable, Insertable)]
+#[derive(Debug, Queryable, Selectable, Insertable, PartialEq, Eq, Hash)]
 #[diesel(table_name = students)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Student {

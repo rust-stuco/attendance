@@ -15,7 +15,23 @@ fn main() -> QueryResult<()> {
         graduation_semester: "S25".to_string(),
     };
 
-    manager.insert_students(&[new_student])?;
+    let other_student = Student {
+        id: "ferris".to_string(),
+        email: "ferris@andrew.cmu.edu".to_string(),
+        first_name: "Ferris".to_string(),
+        last_name: "The Crab".to_string(),
+        major: "ECE".to_string(),
+        class: 2,
+        graduation_semester: "S27".to_string(),
+    };
+
+    manager.insert_students(&[new_student, other_student])?;
+
+    let students = manager.roster()?;
+    println!("{:?}", students);
+
+    let removed_students = manager.remove_all_students()?;
+    assert_eq!(students, removed_students);
 
     Ok(())
 }

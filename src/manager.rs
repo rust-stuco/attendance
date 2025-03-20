@@ -31,18 +31,25 @@ impl AttendanceManager {
             .values(new_students)
             .execute(&mut self.db)?;
 
-        assert_eq!(students_inserted, 1);
+        assert_eq!(students_inserted, new_students.len());
         Ok(())
     }
 
     /// Removes a student from the roster.
-    pub fn remove_student(&mut self, student_id: String) -> QueryResult<Student> {
+    pub fn remove_student(&mut self, student_id: &str) -> QueryResult<Student> {
         use schema::students::dsl::*;
 
         diesel::delete(schema::students::table)
             .filter(id.eq(student_id))
             .returning(Student::as_returning())
             .get_result(&mut self.db)
+    }
+
+    /// Removes all students from the roster.
+    pub fn remove_all_students(&mut self) -> QueryResult<Vec<Student>> {
+        diesel::delete(schema::students::table)
+            .returning(Student::as_returning())
+            .get_results(&mut self.db)
     }
 
     /// Retrieves all students on the roster.
