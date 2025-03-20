@@ -7,9 +7,10 @@ use diesel::sqlite::{Sqlite, SqliteValue};
 use diesel::{AsExpression, FromSqlRow, sql_types::Text};
 use serde::Deserialize;
 use std::fmt::Display;
+use tabled::Tabled;
 
 /// The attendance record for a student for a specific week.
-#[derive(Queryable, Selectable, Insertable, Debug, Clone)]
+#[derive(Queryable, Selectable, Insertable, Tabled, Debug, Clone)]
 #[diesel(table_name = attendance)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Attendance {
@@ -28,7 +29,9 @@ pub struct Attendance {
 ///
 /// Note that there are a lot more columns that the ones listed here, but the remaining columns
 /// aren't super interesting and are usually the same among every student.
-#[derive(Deserialize, Queryable, Selectable, Insertable, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(
+    Deserialize, Queryable, Selectable, Insertable, Tabled, Debug, Clone, PartialEq, Eq, Hash,
+)]
 #[diesel(table_name = students)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Student {
@@ -64,7 +67,9 @@ pub struct Student {
 }
 
 /// The actual date of a given week during the semester.
-#[derive(Queryable, Selectable, Insertable, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Queryable, Selectable, Insertable, Debug, Tabled, Clone, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[diesel(table_name = weeks)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Week {

@@ -25,6 +25,16 @@ impl AttendanceManager {
         Self { db: connection }
     }
 
+    /// Returns the total number of students on the roster.
+    pub fn num_students(&mut self) -> QueryResult<usize> {
+        use schema::students::dsl::*;
+
+        students
+            .count()
+            .get_result(&mut self.db)
+            .map(|count: i64| count as usize)
+    }
+
     /// Retrieves all students on the roster.
     pub fn get_roster(&mut self) -> QueryResult<Vec<Student>> {
         use schema::students::dsl::*;
@@ -200,6 +210,16 @@ impl AttendanceManager {
         diesel::insert_or_ignore_into(schema::attendance::table)
             .values(records)
             .execute(&mut self.db)
+    }
+
+    /// Returns the attendance stats for a given week.
+    pub fn get_week_attendance(&mut self, week_num: i32) -> QueryResult<Vec<Attendance>> {
+        use schema::attendance::dsl::*;
+
+        attendance
+            .select(Attendance::as_select())
+            .filter(week.eq(week_num))
+            .load(&mut self.db)
     }
 }
 
