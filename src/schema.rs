@@ -33,8 +33,4 @@ diesel::table! {
 diesel::joinable!(attendance -> students (student));
 diesel::joinable!(attendance -> weeks (week));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    attendance,
-    students,
-    weeks,
-);
+diesel::allow_tables_to_appear_in_same_query!(attendance, students, weeks,);

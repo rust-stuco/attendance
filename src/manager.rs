@@ -64,17 +64,24 @@ impl AttendanceManager {
     ///
     /// The number of records that will be inserted into the `weeks` table will be equal to the
     /// number of valid weeks passed in.
-    pub fn initialize_weeks(&mut self, start_date: NaiveDate, weeks: &[bool]) -> QueryResult<()> {
+    pub fn initialize_weeks(
+        &mut self,
+        start_date: NaiveDate,
+        valid_weeks: &[bool],
+    ) -> QueryResult<()> {
         /// The number of days in a week.
         const WEEK_DAYS: Days = Days::new(7);
 
-        let total_weeks = weeks.iter().filter(|&&is_valid_week| is_valid_week).count();
+        let total_weeks = valid_weeks
+            .iter()
+            .filter(|&&is_valid_week| is_valid_week)
+            .count();
 
         let mut dates = vec![];
         let mut curr_date = start_date;
 
         // Add dates for every week, skipping invalid weeks.
-        weeks.iter().for_each(|&is_valid_week| {
+        valid_weeks.iter().for_each(|&is_valid_week| {
             curr_date = curr_date
                 .checked_add_days(WEEK_DAYS)
                 .expect("Somehow reached the end of time");
