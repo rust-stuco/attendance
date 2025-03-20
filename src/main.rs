@@ -1,24 +1,21 @@
+use attendance::manager::AttendanceManager;
 use attendance::{self, models::Student};
-use diesel::prelude::*;
 use diesel::result::QueryResult;
 
 fn main() -> QueryResult<()> {
-    use attendance::schema::students::dsl::*;
+    let mut manager = AttendanceManager::new();
 
-    let mut connection = attendance::establish_connection();
+    let new_student = Student {
+        id: "cjtsui".to_string(),
+        email: "cjtsui@andrew.cmu.edu".to_string(),
+        first_name: "Connor".to_string(),
+        last_name: "Tsui".to_string(),
+        major: "CS".to_string(),
+        class: 4,
+        graduation_semester: "S25".to_string(),
+    };
 
-    let _ = attendance::create_student(&mut connection, "cjtsui", "Connor");
-    let _ = attendance::create_student(&mut connection, "abcde", "Ferris");
-
-    let results = students
-        .select(Student::as_select())
-        .load(&mut connection)
-        .expect("Error loading students");
-
-    println!("Displaying {} students", results.len());
-    for student in results {
-        println!("{} ({})", student.andrew_id, student.name);
-    }
+    manager.insert_students(&[new_student])?;
 
     Ok(())
 }
