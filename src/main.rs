@@ -49,8 +49,10 @@ enum WeekCommand {
     MarkExcused,
     /// Marks any remaining students as absent.
     MarkAbsent,
-    /// Displays the attendance for a given week.
+    /// Displays the attendance for the given week.
     ShowWeek,
+    /// Resets / deletes all attendance records for the given week.
+    Reset,
 }
 
 fn main() -> QueryResult<()> {
@@ -76,6 +78,10 @@ fn run_week_command(week_args: WeekArgs) -> QueryResult<()> {
         }
         WeekCommand::MarkAbsent => {
             AttendanceManager::connect().mark_remaining_absent(curr_week)?;
+            return Ok(());
+        }
+        WeekCommand::Reset => {
+            AttendanceManager::connect().delete_week_attendance(curr_week)?;
             return Ok(());
         }
         WeekCommand::MarkPresent | WeekCommand::MarkExcused => (),

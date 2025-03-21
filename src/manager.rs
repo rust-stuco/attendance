@@ -140,6 +140,26 @@ impl AttendanceManager {
             .expect("we just checked this was not empty"))
     }
 
+    /// Returns the attendance stats for a given week.
+    pub fn get_week_attendance(&mut self, week_num: i32) -> QueryResult<Vec<Attendance>> {
+        use schema::attendance::dsl::*;
+
+        attendance
+            .select(Attendance::as_select())
+            .filter(week.eq(week_num))
+            .load(&mut self.db)
+    }
+
+    /// Deletes the attendance data for a given week.
+    pub fn delete_week_attendance(&mut self, week_num: i32) -> QueryResult<Vec<Attendance>> {
+        use schema::attendance::dsl::*;
+
+        diesel::delete(schema::attendance::table)
+            .filter(week.eq(week_num))
+            .returning(Attendance::as_returning())
+            .get_results(&mut self.db)
+    }
+
     /// Given the starting date and the list of valid weeks (since not all weeks may need to take
     /// attendance), initializes the list of dates for valid weeks.
     ///
@@ -261,16 +281,6 @@ impl AttendanceManager {
         diesel::insert_or_ignore_into(schema::attendance::table)
             .values(records)
             .execute(&mut self.db)
-    }
-
-    /// Returns the attendance stats for a given week.
-    pub fn get_week_attendance(&mut self, week_num: i32) -> QueryResult<Vec<Attendance>> {
-        use schema::attendance::dsl::*;
-
-        attendance
-            .select(Attendance::as_select())
-            .filter(week.eq(week_num))
-            .load(&mut self.db)
     }
 }
 
