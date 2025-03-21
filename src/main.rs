@@ -1,25 +1,36 @@
 use attendance::manager::AttendanceManager;
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use diesel::QueryResult;
 use std::io::{self, BufRead};
 
+/// A parser for the command line interface for this attendance application.
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
+    /// The different kinds of commands that can be run for this application.
     #[command(subcommand)]
     command: Command,
 }
 
-/// TODO: Add functionality to show data for a specific student.
+/// The different subcommands that can be run for this attendance application.
 #[derive(Subcommand, Debug, Clone)]
 enum Command {
-    /// Actions to perform specific to a given week.
-    Week(WeekArgs),
+    /// Runs setup for a semester's attendance. ONLY RUN ONCE!
+    Setup,
+    /// Updates the roster of students via the [`ROSTER_PATH`].
+    UpdateRoster,
     /// Show the roster of students.
-    ShowRoster,
+    ShowRoster {
+        #[arg(short, long)]
+        verbose: bool,
+    },
     /// Show the info and attendance of a specific student,
     StudentInfo { id: String },
+    /// Actions to perform specific to a given week.
+    Week(WeekArgs),
 }
 
+/// The command-line arguments for doing actions given a specific week.
 #[derive(Args, Debug, Clone)]
 struct WeekArgs {
     /// The current week.
@@ -29,6 +40,7 @@ struct WeekArgs {
     command: WeekCommand,
 }
 
+/// The different kinds of actions that can be done for a specific week.
 #[derive(ValueEnum, Debug, Clone)]
 enum WeekCommand {
     /// Reads student emails from stdin and marks those students as present for the given week.
@@ -41,28 +53,33 @@ enum WeekCommand {
     ShowWeek,
 }
 
-fn main() {
-    // Parse the command line args.
+fn main() -> QueryResult<()> {
     let args = Cli::parse();
 
-    let Command::Week(week_args) = args.command else {
-        todo!("implement printing the entire roster");
-    };
+    match args.command {
+        Command::Setup => attendance::setup(),
+        Command::UpdateRoster => attendance::update_roster(),
+        Command::ShowRoster { verbose } => attendance::display::show_roster(verbose),
+        Command::StudentInfo { id } => attendance::display::show_student_info(&id),
+        Command::Week(week_args) => run_week_command(week_args),
+    }
+}
 
+/// A helper function for running the week-specific subcommands.
+fn run_week_command(week_args: WeekArgs) -> QueryResult<()> {
     let curr_week = week_args.week;
 
-    if let WeekCommand::ShowWeek = week_args.command {
-        attendance::show_week_attendance(curr_week);
-        return;
-    }
-
-    if let WeekCommand::MarkAbsent = week_args.command {
-        let mut manager = AttendanceManager::connect();
-        manager
-            .mark_remaining_absent(curr_week)
-            .expect("Unable to mark students as absent");
-        return;
-    }
+    match week_args.command {
+        WeekCommand::ShowWeek => {
+            attendance::display::show_week_attendance(curr_week)?;
+            return Ok(());
+        }
+        WeekCommand::MarkAbsent => {
+            AttendanceManager::connect().mark_remaining_absent(curr_week)?;
+            return Ok(());
+        }
+        WeekCommand::MarkPresent | WeekCommand::MarkExcused => (),
+    };
 
     let mut emails = vec![];
 
@@ -93,12 +110,9 @@ fn main() {
     let mut manager = AttendanceManager::connect();
 
     match week_args.command {
-        WeekCommand::MarkPresent => manager
-            .mark_present(curr_week, &ids)
-            .expect("Unable to mark students as present"),
-        WeekCommand::MarkExcused => manager
-            .mark_excused(curr_week, &ids)
-            .expect("Unable to mark students as excused"),
-        _ => (),
+        WeekCommand::MarkPresent => manager.mark_present(curr_week, &ids),
+        WeekCommand::MarkExcused => manager.mark_excused(curr_week, &ids),
+        _ => unreachable!("we checked for the other variants above"),
     }
+    .map(|_| ())
 }

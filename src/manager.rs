@@ -1,5 +1,5 @@
 use crate::models::{Attendance, Status, Student, Week};
-use crate::schema;
+use crate::{StudentAttendance, schema};
 use chrono::{Days, NaiveDate};
 use diesel::prelude::*;
 use diesel::result::QueryResult;
@@ -56,6 +56,57 @@ impl AttendanceManager {
         diesel::delete(schema::students::table)
             .returning(Student::as_returning())
             .get_results(&mut self.db)
+    }
+
+    /// Retrieves a specific student from the roster based on their ID.
+    pub fn get_student(&mut self, student_id: &str) -> QueryResult<Student> {
+        use schema::students::dsl::*;
+
+        let mut found_students = students
+            .filter(id.eq(student_id))
+            .select(Student::as_select())
+            .load(&mut self.db)?;
+
+        assert_eq!(
+            found_students.len(),
+            1,
+            "there should only be 1 student per ID"
+        );
+
+        Ok(found_students
+            .pop()
+            .expect("we just checked this was not empty"))
+    }
+    /// Retrieves a student's attendance over the entire recorded semester.
+    pub fn get_student_attendance(&mut self, student_id: &str) -> QueryResult<StudentAttendance> {
+        use schema::attendance::dsl::*;
+        use schema::weeks::dsl::*;
+
+        // Join attendance with weeks to get the date for each attendance record
+        let records = attendance
+            .inner_join(schema::weeks::table)
+            .filter(student.eq(student_id))
+            .select((week, date, status))
+            .load::<(i32, NaiveDate, Status)>(&mut self.db)?;
+
+        // Organize records by status
+        let mut present_dates = Vec::new();
+        let mut excused_dates = Vec::new();
+        let mut absent_dates = Vec::new();
+
+        for (_, date_val, status_val) in records {
+            match status_val {
+                Status::Present => present_dates.push(date_val),
+                Status::Excused => excused_dates.push(date_val),
+                Status::Absent => absent_dates.push(date_val),
+            }
+        }
+
+        Ok(StudentAttendance {
+            present: present_dates,
+            excused: excused_dates,
+            absent: absent_dates,
+        })
     }
 
     /// Inserts students into the database.
