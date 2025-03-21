@@ -94,11 +94,11 @@ impl AttendanceManager {
         let mut excused_dates = Vec::new();
         let mut absent_dates = Vec::new();
 
-        for (_, date_val, status_val) in records {
+        for (week_num, date_val, status_val) in records {
             match status_val {
-                Status::Present => present_dates.push(date_val),
-                Status::Excused => excused_dates.push(date_val),
-                Status::Absent => absent_dates.push(date_val),
+                Status::Present => present_dates.push((week_num, date_val)),
+                Status::Excused => excused_dates.push((week_num, date_val)),
+                Status::Absent => absent_dates.push((week_num, date_val)),
             }
         }
 

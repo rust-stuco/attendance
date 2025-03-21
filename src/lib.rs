@@ -32,11 +32,11 @@ const VALID_WEEKS: [bool; 15] = [
 #[derive(Debug, Clone)]
 pub struct StudentAttendance {
     /// The dates where a student is present.
-    pub present: Vec<NaiveDate>,
+    pub present: Vec<(i32, NaiveDate)>,
     /// The dates where a student is excused.
-    pub excused: Vec<NaiveDate>,
+    pub excused: Vec<(i32, NaiveDate)>,
     /// The dates where a student is absent.
-    pub absent: Vec<NaiveDate>,
+    pub absent: Vec<(i32, NaiveDate)>,
 }
 
 /// Downloads a student roster given a path to a CSV file.

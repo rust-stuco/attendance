@@ -24,6 +24,11 @@ enum Command {
         #[arg(short, long)]
         verbose: bool,
     },
+    /// Show every student who has been absent at least once, after a certain week.
+    Absences {
+        #[arg(short, long)]
+        after_week: i32,
+    },
     /// Show the info and attendance of a specific student,
     StudentInfo { id: String },
     /// Actions to perform specific to a given week.
@@ -62,6 +67,7 @@ fn main() -> QueryResult<()> {
         Command::Setup => attendance::setup(),
         Command::UpdateRoster => attendance::update_roster(),
         Command::ShowRoster { verbose } => attendance::display::show_roster(verbose),
+        Command::Absences { after_week } => attendance::display::show_absences(after_week),
         Command::StudentInfo { id } => attendance::display::show_student_info(&id),
         Command::Week(week_args) => run_week_command(week_args),
     }
@@ -101,12 +107,12 @@ fn run_week_command(week_args: WeekArgs) -> QueryResult<()> {
         .iter()
         .map(|email| {
             assert!(
-                email.ends_with("@andrew.cmu.edu\n"),
-                "email entry is invalid"
+                email.trim().ends_with("@andrew.cmu.edu"),
+                "email entry is invalid: '{email}'"
             );
 
             let i = email
-                .find("@andrew.cmu.edu\n")
+                .find("@andrew.cmu.edu")
                 .expect("We just checked that this is here");
 
             &email[0..i]
