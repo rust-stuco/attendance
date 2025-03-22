@@ -4,6 +4,7 @@ use diesel::QueryResult;
 use std::path::Path;
 
 pub mod display;
+pub mod mailer;
 pub mod manager;
 pub mod models;
 pub mod schema;
