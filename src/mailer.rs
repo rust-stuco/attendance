@@ -1,79 +1,151 @@
 use crate::manager::AttendanceManager;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use config::Config;
 use diesel::QueryResult;
-use dotenvy::dotenv;
-use lettre::{
-    SmtpTransport, Transport,
-    message::{Message, MultiPart, header::ContentType},
-    transport::smtp::authentication::Credentials,
-};
+use dotenv::dotenv;
+use native_tls::TlsConnector;
 use serde::Deserialize;
+use std::fs;
+use std::net::TcpStream;
+use std::time::Duration;
 use std::{
     env,
-    io::{self, Write},
+    io::{self, Read, Write},
 };
 
 #[derive(Debug, Deserialize)]
-struct EmailConfig {
-    smtp_server: String,
-    smtp_port: u16,
-    from_email: String,
-    from_name: String,
+struct SmtpConfig {
+    smtp: SmtpDetails,
 }
 
-impl EmailConfig {
-    fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        // Load .env file first
-        dotenv().ok();
+#[derive(Debug, Deserialize)]
+struct SmtpDetails {
+    sender: String,
+    cc: String,
+    email_subject: String,
+    email_body_path: String,
+}
 
-        // Load non-sensitive config from TOML
-        let config = config::Config::builder()
-            .add_source(config::File::with_name("config"))
-            .build()?
-            .try_deserialize::<EmailConfig>()?;
+fn load_config() -> Result<SmtpDetails, Box<dyn std::error::Error>> {
+    // Load from config.toml
+    let settings = Config::builder()
+        .add_source(config::File::with_name("config"))
+        .build()?;
+    let smtp_config: SmtpConfig = settings.try_deserialize()?;
 
-        Ok(config)
+    Ok(smtp_config.smtp)
+}
+
+fn parse_recipients(recipients: &str) -> Vec<String> {
+    recipients
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .collect()
+}
+
+fn read_email_body(file_path: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let body = fs::read_to_string(file_path)?;
+    Ok(body)
+}
+
+pub fn send_mail(recipients: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    dotenv().ok();
+
+    // Get password from environment variable
+    let password = env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD must be set");
+    // Create all_recipients vector including CC
+    let mut all_recipients = recipients.to_vec();
+    all_recipients.extend(parse_recipients(&config.cc));
+    println!("{:?}", all_recipients);
+
+    // Connect to the SMTP server (e.g., Gmail's SMTP server)
+    println!("here");
+    let mut stream = TcpStream::connect("smtp.gmail.com:587")?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+
+    // Read the server's welcome message
+    let mut response = [0; 512];
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
+
+    // Send EHLO command
+    stream.write_all(b"EHLO example.com\r\n")?;
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
+
+    // Send STARTTLS command
+    stream.write_all(b"STARTTLS\r\n")?;
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
+
+    // Upgrade the connection to TLS
+    let connector = TlsConnector::new()?;
+    let mut stream = connector.connect("smtp.gmail.com", stream)?;
+
+    // Re-send EHLO after STARTTLS
+    stream.write_all(b"EHLO example.com\r\n")?;
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
+
+    // Authenticate using AUTH LOGIN
+    stream.write_all(b"AUTH LOGIN\r\n")?;
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
+
+    // Send base64-encoded username
+    let username = BASE64.encode(&config.sender);
+    stream.write_all(format!("{}\r\n", username).as_bytes())?;
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
+
+    // Send base64-encoded password
+    let password_encoded = BASE64.encode(&password);
+    stream.write_all(format!("{}\r\n", password_encoded).as_bytes())?;
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
+
+    // Send MAIL FROM command
+    stream.write_all(format!("MAIL FROM:<{}>\r\n", config.sender).as_bytes())?;
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
+
+    // Send RCPT TO commands for all recipients
+    for recipient in all_recipients {
+        stream.write_all(format!("RCPT TO:<{}>\r\n", recipient).as_bytes())?;
+        stream.read(&mut response)?;
+        println!("Server: {}", String::from_utf8_lossy(&response));
     }
 
-    fn get_credentials() -> Result<Credentials, env::VarError> {
-        let username = env::var("SMTP_USERNAME")?;
-        let password = env::var("SMTP_PASSWORD")?;
-        Ok(Credentials::new(username, password))
-    }
-}
+    // Send DATA command
+    stream.write_all(b"DATA\r\n")?;
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
 
-fn create_mailer(config: &EmailConfig) -> Result<SmtpTransport, Box<dyn std::error::Error>> {
-    let creds = EmailConfig::get_credentials()?;
+    // Send email headers and body
+    let email_body = read_email_body(&config.email_body_path)?;
+    let email_headers = format!(
+        "From: {}\r\n\
+         To: undisclosed-recipients\r\n\
+         CC: {}\r\n\
+         Subject: {}\r\n\
+         Content-Type: text/html; charset=UTF-8\r\n\
+         \r\n",
+        config.sender, config.cc, config.email_subject
+    );
 
-    Ok(SmtpTransport::relay(&config.smtp_server)?
-        .port(config.smtp_port)
-        .credentials(creds)
-        .build())
-}
+    stream.write_all(email_headers.as_bytes())?;
+    stream.write_all(email_body.as_bytes())?;
+    stream.write_all(b"\r\n.\r\n")?; // End of email
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
 
-fn send_absence_email(
-    mailer: &SmtpTransport,
-    config: &EmailConfig,
-    student_name: &str,
-    student_email: &str,
-    absences: usize,
-    after_week: i32,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let email = Message::builder()
-        .from(format!("{} <{}>", config.from_name, config.from_email).parse()?)
-        .to(format!("{} <{}>", student_name, student_email).parse()?)
-        .subject("Course Attendance Notice")
-        .multipart(
-            MultiPart::alternative().singlepart(
-                lettre::message::SinglePart::builder()
-                    .header(ContentType::TEXT_PLAIN)
-                    .body(format!(
-                        "Hi {},\n\nBlah blah you have been absent for {} classes since week {}.\n\nBest regards,\n{}",
-                        student_name, absences, after_week, config.from_name
-                    )),
-            ),
-        )?;
+    // Send QUIT command
+    stream.write_all(b"QUIT\r\n")?;
+    stream.read(&mut response)?;
+    println!("Server: {}", String::from_utf8_lossy(&response));
 
-    mailer.send(&email)?;
     Ok(())
 }
 
@@ -84,6 +156,7 @@ pub fn email_absentees(after_week: i32, min_absences: i32) -> QueryResult<()> {
 
     // Get all attendance records in one batch using transaction
     let mut absentees = Vec::new();
+    let mut recipient_emails = Vec::new();
     for student in roster {
         let attendance = manager.get_student_attendance(&student.id)?;
         let absences = attendance
@@ -93,6 +166,7 @@ pub fn email_absentees(after_week: i32, min_absences: i32) -> QueryResult<()> {
             .count();
 
         if absences >= min_absences as usize {
+            recipient_emails.push(student.email.clone());
             absentees.push((student, absences));
         }
     }
@@ -122,24 +196,6 @@ pub fn email_absentees(after_week: i32, min_absences: i32) -> QueryResult<()> {
         return Ok(());
     }
 
-    // Load email configuration
-    let config = match EmailConfig::load() {
-        Ok(config) => config,
-        Err(e) => {
-            eprintln!("Failed to load email configuration: {}", e);
-            return Ok(());
-        }
-    };
-
-    // Create mailer
-    let mailer = match create_mailer(&config) {
-        Ok(mailer) => mailer,
-        Err(e) => {
-            eprintln!("Failed to create mailer: {}", e);
-            return Ok(());
-        }
-    };
-
     // Ask for confirmation
     print!("\nWould you like to email these students? [y/N] ");
     if let Err(e) = io::stdout().flush() {
@@ -160,20 +216,8 @@ pub fn email_absentees(after_week: i32, min_absences: i32) -> QueryResult<()> {
 
     // Send emails
     println!("\nSending emails...");
-    for (student, absences) in absentees {
-        let student_name = format!("{} {}", student.first_name, student.last_name);
-        match send_absence_email(
-            &mailer,
-            &config,
-            &student_name,
-            &student.email,
-            absences,
-            after_week,
-        ) {
-            Ok(_) => println!("✓ Sent email to {}", student.email),
-            Err(e) => eprintln!("✗ Failed to send email to {}: {}", student.email, e),
-        }
-    }
+    send_mail(&recipient_emails);
+    println!("Done");
 
     Ok(())
 }

@@ -1,4 +1,5 @@
-smtp_server = "smtp.gmail.com"
-smtp_port = 587
-from_email = "xtremelysecret@gmail.com"
-from_name = "Ferris"
+[smtp]
+sender = "xtremelysecret@gmail.com"
+cc = "cjtsui@andrew.cmu.edu,jwruan@andrew.cmu.edu,terrancc@andrew.cmu.edu,frf@andrew.cmu.edu"
+email_subject = "98008 Unexcused Absence"
+email_body_path = "./examples/email_body.html"
