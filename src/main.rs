@@ -33,6 +33,8 @@ enum Command {
     StudentInfo { id: String },
     /// Actions to perform specific to a given week.
     Week(WeekArgs),
+    /// Email students with excessive absences after a given week.
+    EmailAbsentees(EmailAbsenteesArgs),
 }
 
 /// The command-line arguments for doing actions given a specific week.
@@ -43,6 +45,31 @@ struct WeekArgs {
     /// The action to perform for the given week.
     #[arg(value_enum)]
     command: WeekCommand,
+}
+
+/// The command-line arguments for emailing absentee students.
+#[derive(Args, Debug, Clone)]
+struct EmailAbsenteesArgs {
+    /// The mode for emailing absentees
+    #[arg(value_enum)]
+    mode: EmailMode,
+
+    /// The specific week for which to email absentees (for SingleWeek mode)
+    /// Or the starting week to check from (for Cumulative mode)
+    week: i32,
+
+    /// The minimum number of absences to trigger an email (only for Cumulative mode)
+    #[arg(short, long, required_if_eq("mode", "Cumulative"))]
+    min_absences: Option<i32>,
+}
+
+/// The different modes for emailing absentees
+#[derive(ValueEnum, Debug, Clone)]
+enum EmailMode {
+    /// Email students absent for a specific week
+    SingleWeek,
+    /// Email students with cumulative absences exceeding threshold after a specific week
+    Cumulative,
 }
 
 /// The different kinds of actions that can be done for a specific week.
@@ -70,6 +97,13 @@ fn main() -> QueryResult<()> {
         Command::Absences { after_week } => attendance::display::show_absences(after_week),
         Command::StudentInfo { id } => attendance::display::show_student_info(&id),
         Command::Week(week_args) => run_week_command(week_args),
+        Command::EmailAbsentees(email_args) => match email_args.mode {
+            EmailMode::SingleWeek => attendance::mailer::email_weekly_absentees(email_args.week),
+            EmailMode::Cumulative => attendance::mailer::email_cumulative_absentees(
+                email_args.week,
+                email_args.min_absences.unwrap_or(2), // Should always be present due to required_if_eq
+            ),
+        },
     }
 }
 
