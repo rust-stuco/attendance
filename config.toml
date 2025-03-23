@@ -6,3 +6,5 @@ email_body_path = "./examples/email_body.html"
 
 [setup]
 roster_path = "./examples/roster.csv"
+start_date = "2025-01-15"
+valid_weeks = [true, true, true, true, true, true, true, false, true, true, true, true, true, true, true]
