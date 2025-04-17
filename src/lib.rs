@@ -2,8 +2,10 @@ use chrono::NaiveDate;
 use csv::Reader;
 use diesel::QueryResult;
 use std::path::Path;
+use std::sync::OnceLock;
 
 pub mod display;
+pub mod mailer;
 pub mod manager;
 pub mod models;
 pub mod schema;
@@ -11,22 +13,35 @@ pub mod schema;
 use manager::AttendanceManager;
 use models::Student;
 
-/// The path to the roster of students.
-///
-/// We hardcode this since this should only change once per semester.
-const ROSTER_PATH: &str = "../roster-s25.csv";
+use config::Config;
+use serde::Deserialize;
 
-/// The date of the first day of attendance.
-///
-/// We hardcode this since this should only change once per semester.
-const START_DATE: NaiveDate = NaiveDate::from_ymd_opt(2025, 1, 15).expect("date is not real");
+#[derive(Debug, Deserialize)]
+struct AppConfig {
+    setup: SetupDetails,
+}
 
-/// The weeks that are valid.
-///
-/// We hardcode this since this should only change once per semester.
-const VALID_WEEKS: [bool; 15] = [
-    true, true, true, true, true, true, true, false, true, true, true, true, true, true, true,
-];
+#[derive(Debug, Deserialize)]
+struct SetupDetails {
+    roster_path: String,
+    start_date: String,
+    valid_weeks: Vec<bool>,
+}
+
+// Global config, lazy initialized with OnceLock
+static CONFIG: OnceLock<SetupDetails> = OnceLock::new();
+
+fn get_config() -> &'static SetupDetails {
+    CONFIG.get_or_init(|| load_config().expect("Failed to load config"))
+}
+
+fn load_config() -> Result<SetupDetails, config::ConfigError> {
+    let settings = Config::builder()
+        .add_source(config::File::with_name("config"))
+        .build()?;
+    let app_config: AppConfig = settings.try_deserialize()?;
+    Ok(app_config.setup)
+}
 
 /// A helper struct to carry information about a student's attendance.
 #[derive(Debug, Clone)]
@@ -57,8 +72,8 @@ fn download_roster<P: AsRef<Path>>(path: P) -> Vec<Student> {
 ///
 /// This binary should ONLY be run once, at the beginning of the semester.
 ///
-/// This binary will download the roster from the provided [`ROSTER_PATH`], and it will also set up
-/// the `weeks` table with the correct starting date and weeks.
+/// This binary will download the roster from the provided path in config, and it will also set up
+/// the `weeks` table with the correct starting date and weeks from config.
 ///
 /// IMPORTANT: Depending on the semester, [`VALID_WEEKS`] might have to change.
 pub fn setup() -> QueryResult<()> {
@@ -67,30 +82,40 @@ pub fn setup() -> QueryResult<()> {
     // Delete the entire roster before importing a new one.
     let _ = manager.delete_roster();
 
+    // Get config
+    let config = get_config();
+
     // Insert the students from the given roster.
-    let new_roster = download_roster(ROSTER_PATH);
+    let new_roster = download_roster(&config.roster_path);
     manager.insert_students(&new_roster)?;
 
     let roster = manager.get_roster()?;
     println!("{:#?}", roster);
     println!("{} students total", roster.len());
 
+    // Parse the start date from config
+    let start_date = NaiveDate::parse_from_str(&config.start_date, "%Y-%m-%d")
+        .expect("Invalid start date format in config");
+
     // Initialize the weeks for this semester.
-    manager.initialize_weeks(START_DATE, &VALID_WEEKS)?;
+    manager.initialize_weeks(start_date, &config.valid_weeks)?;
 
     Ok(())
 }
 
 /// Updates the roster of students.
 ///
-/// This binary will look at the roster provided in [`ROSTER_PATH`] and look at the diff between the
+/// This binary will look at the roster provided in config and look at the diff between the
 /// current roster stored in the database. It will then add / delete students according to the CSV
-/// roster from [`ROSTER_PATH`].
+/// roster from config.
 pub fn update_roster() -> QueryResult<()> {
     let mut manager = AttendanceManager::connect();
 
+    // Get configuration
+    let config = get_config();
+
     // Insert the students from the given roster.
-    let new_roster = download_roster(ROSTER_PATH);
+    let new_roster = download_roster(&config.roster_path);
 
     let curr_roster = manager.get_roster()?;
 

@@ -1,0 +1,16 @@
+[setup]
+roster_path = "./examples/roster.csv"
+start_date = "2025-01-15"
+valid_weeks = [true, true, true, true, true, true, true, false, true, true, true, true, true, true, true]
+
+[smtp]
+sender = "xtremelysecret@gmail.com"
+cc = "cjtsui@andrew.cmu.edu,jwruan@andrew.cmu.edu,terrancc@andrew.cmu.edu,frf@andrew.cmu.edu"
+
+[templates.weekly]
+subject = "98008 Unexcused Absence"
+body_path = "./examples/email_weekly_body.html"
+
+[templates.cumulative]
+subject = "98008 Danger Zone for Attendance"
+body_path = "./examples/email_cumulative_body.html"
