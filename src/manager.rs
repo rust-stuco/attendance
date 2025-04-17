@@ -3,12 +3,13 @@ use crate::{StudentAttendance, schema};
 use chrono::{Days, NaiveDate};
 use diesel::prelude::*;
 use diesel::result::QueryResult;
+use diesel::upsert::excluded;
 use dotenvy::dotenv;
 use std::env;
 
 /// The manager for recording, modifying, and retrieving attendance data.
 pub struct AttendanceManager {
-    db: SqliteConnection,
+    db: PgConnection,
 }
 
 impl AttendanceManager {
@@ -19,7 +20,7 @@ impl AttendanceManager {
 
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-        let connection = SqliteConnection::establish(&database_url)
+        let connection = PgConnection::establish(&database_url)
             .unwrap_or_else(|_| panic!("Error connecting to {}", database_url));
 
         Self { db: connection }
@@ -240,8 +241,15 @@ impl AttendanceManager {
 
         // Mark the students with the given status.
         // If the record already exists, this simply updates the status.
-        diesel::replace_into(schema::attendance::table)
-            .values(records)
+        // TODO(connor) Actually test if this works.
+        diesel::insert_into(schema::attendance::table)
+            .values(&records)
+            .on_conflict((
+                schema::attendance::dsl::student,
+                schema::attendance::dsl::week,
+            ))
+            .do_update()
+            .set(schema::attendance::dsl::status.eq(excluded(schema::attendance::dsl::status)))
             .execute(&mut self.db)?;
 
         Ok(())
@@ -278,8 +286,13 @@ impl AttendanceManager {
             .collect();
 
         // Inserts absent records for every student, but if the record already exists, do nothing.
-        diesel::insert_or_ignore_into(schema::attendance::table)
+        diesel::insert_into(schema::attendance::table)
             .values(records)
+            .on_conflict((
+                schema::attendance::dsl::student,
+                schema::attendance::dsl::week,
+            ))
+            .do_nothing()
             .execute(&mut self.db)
     }
 }
