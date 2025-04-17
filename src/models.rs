@@ -1,18 +1,19 @@
 use crate::schema::{attendance, students, weeks};
 use chrono::NaiveDate;
 use diesel::deserialize::FromSql;
+use diesel::pg::{Pg, PgValue};
 use diesel::prelude::*;
 use diesel::serialize::{Output, ToSql};
-use diesel::sqlite::{Sqlite, SqliteValue};
 use diesel::{AsExpression, FromSqlRow, sql_types::Text};
 use serde::Deserialize;
 use std::fmt::Display;
+use std::io::Write;
 use tabled::Tabled;
 
 /// The attendance record for a student for a specific week.
 #[derive(Queryable, Selectable, Insertable, Tabled, Debug, Clone)]
 #[diesel(table_name = attendance)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Attendance {
     /// A foreign-key reference to a student's ID in the students table.
     pub student: String,
@@ -33,7 +34,7 @@ pub struct Attendance {
     Deserialize, Queryable, Selectable, Insertable, Tabled, Debug, Clone, PartialEq, Eq, Hash,
 )]
 #[diesel(table_name = students)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Student {
     #[serde(rename(deserialize = "Andrew ID"))]
     pub id: String,
@@ -71,7 +72,7 @@ pub struct Student {
     Queryable, Selectable, Insertable, Debug, Tabled, Clone, PartialEq, Eq, PartialOrd, Ord,
 )]
 #[diesel(table_name = weeks)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Week {
     pub id: i32,
     pub date: NaiveDate,
@@ -108,16 +109,20 @@ impl TryFrom<&str> for Status {
     }
 }
 
-impl FromSql<Text, Sqlite> for Status {
-    fn from_sql(bytes: SqliteValue) -> diesel::deserialize::Result<Self> {
-        let t = <String as FromSql<Text, Sqlite>>::from_sql(bytes)?;
+impl FromSql<Text, Pg> for Status {
+    fn from_sql(bytes: PgValue) -> diesel::deserialize::Result<Self> {
+        let t = <String as FromSql<Text, Pg>>::from_sql(bytes)?;
         Ok(t.as_str().try_into()?)
     }
 }
 
-impl ToSql<Text, Sqlite> for Status {
-    fn to_sql<'a>(&'a self, out: &mut Output<'a, '_, Sqlite>) -> diesel::serialize::Result {
-        out.set_value(self.to_string());
+impl ToSql<Text, Pg> for Status {
+    fn to_sql<'a>(&'a self, out: &mut Output<'a, '_, Pg>) -> diesel::serialize::Result {
+        match self {
+            Status::Present => out.write_all(b"Present")?,
+            Status::Excused => out.write_all(b"Excused")?,
+            Status::Absent => out.write_all(b"Absent")?,
+        }
         Ok(diesel::serialize::IsNull::No)
     }
 }
