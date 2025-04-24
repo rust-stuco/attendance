@@ -7,6 +7,6 @@ CREATE TABLE students (
     college TEXT NOT NULL,
     department TEXT NOT NULL,
     major TEXT NOT NULL,
-    class INTEGER NOT NULL,
+    class BIGINT NOT NULL,
     graduation_semester TEXT NOT NULL
 );

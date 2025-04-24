@@ -39,7 +39,6 @@ impl AttendanceManager {
     /// Retrieves all students on the roster.
     pub fn get_roster(&mut self) -> QueryResult<Vec<Student>> {
         use schema::students::dsl::*;
-
         students.select(Student::as_select()).load(&mut self.db)
     }
 
@@ -88,7 +87,7 @@ impl AttendanceManager {
             .inner_join(schema::weeks::table)
             .filter(student.eq(student_id))
             .select((week, date, status))
-            .load::<(i32, NaiveDate, Status)>(&mut self.db)?;
+            .load::<(i64, NaiveDate, Status)>(&mut self.db)?;
 
         // Organize records by status
         let mut present_dates = Vec::new();
@@ -142,7 +141,7 @@ impl AttendanceManager {
     }
 
     /// Returns the attendance stats for a given week.
-    pub fn get_week_attendance(&mut self, week_num: i32) -> QueryResult<Vec<Attendance>> {
+    pub fn get_week_attendance(&mut self, week_num: i64) -> QueryResult<Vec<Attendance>> {
         use schema::attendance::dsl::*;
 
         attendance
@@ -152,7 +151,7 @@ impl AttendanceManager {
     }
 
     /// Deletes the attendance data for a given week.
-    pub fn delete_week_attendance(&mut self, week_num: i32) -> QueryResult<Vec<Attendance>> {
+    pub fn delete_week_attendance(&mut self, week_num: i64) -> QueryResult<Vec<Attendance>> {
         use schema::attendance::dsl::*;
 
         diesel::delete(schema::attendance::table)
@@ -190,7 +189,7 @@ impl AttendanceManager {
             if is_valid_week {
                 let week = Week {
                     // Make sure to 1-index.
-                    id: dates.len() as i32 + 1,
+                    id: dates.len() as i64 + 1,
                     date: curr_date,
                 };
 
@@ -218,7 +217,7 @@ impl AttendanceManager {
     /// already exists, this will update that [`Status`].
     ///
     /// If `student_ids` contains an ID that is not on the roster, this function will ignore it.
-    fn mark(&mut self, week: i32, student_ids: &[&str], status: Status) -> QueryResult<()> {
+    fn mark(&mut self, week: i64, student_ids: &[&str], status: Status) -> QueryResult<()> {
         let roster = self.get_roster_ids()?;
 
         // Note that we can't use `.contains` here beacuse roster is `Vec<String>`, not `Vec<&str>`.
@@ -258,14 +257,14 @@ impl AttendanceManager {
     /// For a given week, mark all of the given students as [`Status::Present`].
     ///
     /// If `student_ids` contains an ID that is not on the roster, this function will ignore it.
-    pub fn mark_present(&mut self, week: i32, student_ids: &[&str]) -> QueryResult<()> {
+    pub fn mark_present(&mut self, week: i64, student_ids: &[&str]) -> QueryResult<()> {
         self.mark(week, student_ids, Status::Present)
     }
 
     /// For a given week, mark all of the given students as [`Status::Excused`].
     ///
     /// If `student_ids` contains an ID that is not on the roster, this function will ignore it.
-    pub fn mark_excused(&mut self, week: i32, student_ids: &[&str]) -> QueryResult<()> {
+    pub fn mark_excused(&mut self, week: i64, student_ids: &[&str]) -> QueryResult<()> {
         self.mark(week, student_ids, Status::Excused)
     }
 
@@ -273,7 +272,7 @@ impl AttendanceManager {
     /// or [`Status::Excused`] as [`Status::Absent`].
     ///
     /// Returns the number of students that were marked absent.
-    pub fn mark_remaining_absent(&mut self, week: i32) -> QueryResult<usize> {
+    pub fn mark_remaining_absent(&mut self, week: i64) -> QueryResult<usize> {
         let roster = self.get_roster_ids()?;
 
         let records: Vec<Attendance> = roster

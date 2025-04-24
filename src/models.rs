@@ -18,7 +18,7 @@ pub struct Attendance {
     /// A foreign-key reference to a student's ID in the students table.
     pub student: String,
     /// A foreign-key reference to a week's ID in the weeks table.
-    pub week: i32,
+    pub week: i64,
     /// The status of a student for a given week.
     pub status: Status,
 }
@@ -61,7 +61,7 @@ pub struct Student {
     pub major: String,
 
     #[serde(rename(deserialize = "Class"))]
-    pub class: i32,
+    pub class: i64,
 
     #[serde(rename(deserialize = "Graduation Semester"))]
     pub graduation_semester: String,
@@ -74,7 +74,7 @@ pub struct Student {
 #[diesel(table_name = weeks)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Week {
-    pub id: i32,
+    pub id: i64,
     pub date: NaiveDate,
 }
 

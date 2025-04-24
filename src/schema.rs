@@ -3,7 +3,7 @@
 diesel::table! {
     attendance (student, week) {
         student -> Text,
-        week -> Int4,
+        week -> Int8,
         status -> Text,
     }
 }
@@ -18,14 +18,14 @@ diesel::table! {
         college -> Text,
         department -> Text,
         major -> Text,
-        class -> Int4,
+        class -> Int8,
         graduation_semester -> Text,
     }
 }
 
 diesel::table! {
     weeks (id) {
-        id -> Int4,
+        id -> Int8,
         date -> Date,
     }
 }
