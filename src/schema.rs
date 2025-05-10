@@ -3,7 +3,7 @@
 diesel::table! {
     attendance (student, week) {
         student -> Text,
-        week -> Integer,
+        week -> Int8,
         status -> Text,
     }
 }
@@ -18,14 +18,14 @@ diesel::table! {
         college -> Text,
         department -> Text,
         major -> Text,
-        class -> Integer,
+        class -> Int8,
         graduation_semester -> Text,
     }
 }
 
 diesel::table! {
     weeks (id) {
-        id -> Integer,
+        id -> Int8,
         date -> Date,
     }
 }
@@ -33,4 +33,8 @@ diesel::table! {
 diesel::joinable!(attendance -> students (student));
 diesel::joinable!(attendance -> weeks (week));
 
-diesel::allow_tables_to_appear_in_same_query!(attendance, students, weeks,);
+diesel::allow_tables_to_appear_in_same_query!(
+    attendance,
+    students,
+    weeks,
+);

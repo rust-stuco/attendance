@@ -1,0 +1,4 @@
+CREATE TABLE weeks (
+    id BIGINT NOT NULL PRIMARY KEY,
+    date DATE NOT NULL
+);

@@ -27,7 +27,7 @@ enum Command {
     /// Show every student who has been absent at least once, after a certain week.
     Absences {
         #[arg(short, long)]
-        after_week: i32,
+        after_week: i64,
     },
     /// Show the info and attendance of a specific student,
     StudentInfo { id: String },
@@ -41,7 +41,7 @@ enum Command {
 #[derive(Args, Debug, Clone)]
 struct WeekArgs {
     /// The current week.
-    week: i32,
+    week: i64,
     /// The action to perform for the given week.
     #[arg(value_enum)]
     command: WeekCommand,
@@ -56,11 +56,11 @@ struct EmailAbsenteesArgs {
 
     /// The specific week for which to email absentees (for SingleWeek mode)
     /// Or the starting week to check from (for Cumulative mode)
-    week: i32,
+    week: i64,
 
     /// The minimum number of absences to trigger an email (only for Cumulative mode)
     #[arg(short, long, required_if_eq("mode", "Cumulative"))]
-    min_absences: Option<i32>,
+    min_absences: Option<i64>,
 }
 
 /// The different modes for emailing absentees

@@ -258,7 +258,7 @@ where
 }
 
 /// Emails students who have more than the specified number of absences after a given week.
-pub fn email_cumulative_absentees(after_week: i32, min_absences: i32) -> QueryResult<()> {
+pub fn email_cumulative_absentees(after_week: i64, min_absences: i64) -> QueryResult<()> {
     let description = format!(
         "Students with {} or more absences after week {}:",
         min_absences, after_week
@@ -293,7 +293,7 @@ pub fn email_cumulative_absentees(after_week: i32, min_absences: i32) -> QueryRe
 }
 
 /// Emails students who were absent for a specific week.
-pub fn email_weekly_absentees(week: i32) -> QueryResult<()> {
+pub fn email_weekly_absentees(week: i64) -> QueryResult<()> {
     let description = format!("Students absent for week {}:", week);
 
     email_absentees_generic(&description, "weekly", |manager| {

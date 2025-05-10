@@ -47,11 +47,11 @@ fn load_config() -> Result<SetupDetails, config::ConfigError> {
 #[derive(Debug, Clone)]
 pub struct StudentAttendance {
     /// The dates where a student is present.
-    pub present: Vec<(i32, NaiveDate)>,
+    pub present: Vec<(i64, NaiveDate)>,
     /// The dates where a student is excused.
-    pub excused: Vec<(i32, NaiveDate)>,
+    pub excused: Vec<(i64, NaiveDate)>,
     /// The dates where a student is absent.
-    pub absent: Vec<(i32, NaiveDate)>,
+    pub absent: Vec<(i64, NaiveDate)>,
 }
 
 /// Downloads a student roster given a path to a CSV file.

@@ -6,7 +6,7 @@ use tabled::{Table, Tabled, settings::Style};
 /// Displays every absence after a given week (inclusive).
 ///
 /// Note that you could push this logic down to the database for better performance.
-pub fn show_absences(after_week: i32) -> QueryResult<()> {
+pub fn show_absences(after_week: i64) -> QueryResult<()> {
     let mut manager = AttendanceManager::connect();
 
     let roster_ids = manager.get_roster_ids()?;
@@ -14,7 +14,7 @@ pub fn show_absences(after_week: i32) -> QueryResult<()> {
     #[derive(Tabled, PartialEq, Eq, PartialOrd, Ord)]
     struct Absence {
         student: String,
-        week: i32,
+        week: i64,
         date: NaiveDate,
     }
 
@@ -45,7 +45,7 @@ pub fn show_absences(after_week: i32) -> QueryResult<()> {
 }
 
 /// Pretty prints the attendance data for a given week.
-pub fn show_week_attendance(week: i32) -> QueryResult<()> {
+pub fn show_week_attendance(week: i64) -> QueryResult<()> {
     let mut manager = AttendanceManager::connect();
 
     let attendance = manager.get_week_attendance(week)?;
